@@ -28,6 +28,7 @@
 // SOFTWARE.
 
 #pragma once
+#include "forward.hpp"
 
 //------------------------------------------------------------------------------
 // SUPPORT FOR EIGEN MATRICES AND VECTORS OF DUAL

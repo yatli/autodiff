@@ -8,16 +8,16 @@ using namespace autodiff;
 
 int main()
 {
-    var x = 0.5;                              // the input variable x
-    var u = sin(x) * cos(x);                  // the output variable u
+    var<double> x = 0.5;                              // the input variable x
+    var<double> u = sin(x) * cos(x);                  // the output variable u
 
-    DerivativesX dud = derivativesx(u);       // evaluate the first order derivatives of u
+    DerivativesX<double> dud = derivativesx(u);       // evaluate the first order derivatives of u
 
-    var dudx = dud(x);                        // extract the first order derivative du/dx of type var, not double!
+    var<double> dudx = dud(x);                        // extract the first order derivative du/dx of type var, not double!
 
-    DerivativesX d2udxd = derivativesx(dudx); // evaluate the second order derivatives of du/dx
+    DerivativesX<double> d2udxd = derivativesx(dudx); // evaluate the second order derivatives of du/dx
 
-    var d2udxdx = d2udxd(x);                  // extract the second order derivative d2u/dxdx of type var, not double!
+    var<double> d2udxdx = d2udxd(x);                  // extract the second order derivative d2u/dxdx of type var, not double!
 
     cout << "u = " << u << endl;              // print the evaluated output variable u
     cout << "du/dx = " << dudx << endl;       // print the evaluated first order derivative du/dx

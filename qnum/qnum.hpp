@@ -30,16 +30,20 @@ template <> struct number_traits<int32_t> {
 template <typename T>
 struct qspace_number_t
 {
-  static constexpr bool saturate_ex = false;
   using T2x = typename number_traits<T>::T2x;
   using Tu = typename number_traits<T>::Tu;
   T val;
 
+public:
+
   qspace_number_t(): val(0){}
   qspace_number_t(double v) {
-    val = static_cast<T>(v / (1 + ext_max()) * T_max());
-    // TODO saturate ex
+    auto constexpr upper = 1 + ext_max();
+    if (v > upper) v = upper;
+    if (v < -upper) v = -upper;
+    val = static_cast<T>(v / (upper) * T_max());
   }
+  qspace_number_t(const int& v) : qspace_number_t<T>(static_cast<double>(v)) { }
 
   qspace_number_t next() const {
     qspace_number_t ret;
@@ -57,10 +61,100 @@ struct qspace_number_t
     return static_cast<double>(val) / T_max() * (1+ext_max());
   }
 
+  qspace_number_t<T> neg() const {
+    return from_literal(-val);
+  }
+
+  qspace_number_t<T> add(const qspace_number_t<T>& rhs) const {
+    qspace_number_t<T> ret;
+    T2x tmp = val + rhs.val;
+    ret.val = saturate(tmp);
+    return ret;
+  }
+
+  qspace_number_t<T> sub(const qspace_number_t<T>& rhs) const {
+    qspace_number_t<T> ret;
+    T2x tmp = val - rhs.val;
+    ret.val = saturate(tmp);
+    return ret;
+  }
+
+  qspace_number_t<T> mul(const qspace_number_t<T>& rhs) const {
+    qspace_number_t<T> ret;
+    T2x tmp = static_cast<T2x>(val) * static_cast<T2x>(rhs.val);
+    tmp += K();
+    ret.val = saturate(tmp >> frac_bits());
+    return ret;
+  }
+
+  qspace_number_t<T> div(const qspace_number_t<T>& rhs) const {
+    qspace_number_t<T> ret;
+    // pre-scaling up
+    T2x tmp = static_cast<T2x>(val) << frac_bits();
+    // rounding
+    if ((tmp >= 0 && rhs.val >= 0) || (tmp < 0 && rhs.val < 0)) {
+      tmp += rhs.val / 2;
+    } else {
+      tmp -= rhs.val / 2;
+    }
+    ret.val = static_cast<T>(tmp / rhs.val);
+    return ret;
+  }
+
+  bool operator == (const qspace_number_t<T>& rhs) const {
+    return val == rhs.val;
+  }
+
+  bool operator < (const qspace_number_t<T>& rhs) const {
+    return val < rhs.val;
+  }
+
+  bool operator != (const qspace_number_t<T>& rhs) const {
+    return !(*this == rhs);
+  }
+
+  bool operator <= (const qspace_number_t<T>& rhs) const {
+    return *this < rhs || *this == rhs;
+  }
+
+  bool operator > (const qspace_number_t<T>& rhs) const {
+    return rhs < *this;
+  }
+
+  bool operator >= (const qspace_number_t<T>& rhs) const {
+    return rhs <= *this;
+  }
+
+  qspace_number_t<T>& operator += (const qspace_number_t<T>& rhs) {
+    *this = *this + rhs;
+    return *this;
+  }
+
+  qspace_number_t<T>& operator -= (const qspace_number_t<T>& rhs) {
+    *this = *this - rhs;
+    return *this;
+  }
+
+  qspace_number_t<T>& operator *= (const qspace_number_t<T>& rhs) {
+    *this = *this * rhs;
+    return *this;
+  }
+
+  qspace_number_t<T>& operator /= (const qspace_number_t<T>& rhs) {
+    *this = *this / rhs;
+    return *this;
+  }
+
   static T saturate(const T2x& v) {
     if (v > T_max()) return T_max();
     if (v < T_min()) return T_min();
     return static_cast<T>(v);
+  }
+
+  static qspace_number_t<T> from_literal(const T& t) {
+    qspace_number_t<T> ret;
+    ret.val = t;
+    return ret;
   }
 
   static constexpr T T_max() { return std::numeric_limits<T>::max(); }
@@ -68,9 +162,9 @@ struct qspace_number_t
   static constexpr int ext_bits() ;
   static constexpr int joint_bits() { return std::numeric_limits<T>::digits; }
   static constexpr int frac_bits() { return joint_bits() - ext_bits(); }
-  static constexpr int ext_max() { return (1 << ext_bits()) - 1; }
-  static constexpr int frac_max() { return (1 << frac_bits()) - 1; }
-  static constexpr int K() { return 1 << (frac_bits() - 1); }
+  static constexpr T ext_max() { return (1 << ext_bits()) - 1; }
+  static constexpr T frac_max() { return (1 << frac_bits()) - 1; }
+  static constexpr int K() { return 1 << (frac_bits() - 1); } // for rounding
 };
 
 template <typename T>
@@ -79,41 +173,29 @@ std::ostream& operator << (std::ostream& os, const qspace_number_t<T>& qnum) {
 }
 
 template <typename T>
+qspace_number_t<T> operator - (const qspace_number_t<T> &x) {
+  return x.neg();
+}
+
+
+template <typename T>
 qspace_number_t<T> operator + (const qspace_number_t<T> &lhs, const qspace_number_t<T> &rhs) {
-  qspace_number_t<T> ret;
-  ret.val = lhs.val + rhs.val;
-  return ret;
+  return lhs.add(rhs);
 }
 
 template <typename T>
 qspace_number_t<T> operator - (const qspace_number_t<T> &lhs, const qspace_number_t<T> &rhs) {
-  qspace_number_t<T> ret;
-  ret.val = lhs.val - rhs.val;
-  return ret;
+  return lhs.sub(rhs);
 }
 
 template <typename T>
 qspace_number_t<T> operator * (const qspace_number_t<T> &lhs, const qspace_number_t<T> &rhs) {
-  qspace_number_t<T> ret;
-  typename number_traits<T>::T2x tmp = static_cast<typename number_traits<T>::T2x>(lhs.val) * static_cast<typename number_traits<T>::T2x>(rhs.val);
-  tmp += qspace_number_t<T>::K();
-  ret.val = qspace_number_t<T>::saturate(tmp >> qspace_number_t<T>::frac_bits());
-  return ret;
+  return lhs.mul(rhs);
 }
 
 template <typename T>
 qspace_number_t<T> operator / (const qspace_number_t<T> &lhs, const qspace_number_t<T> &rhs) {
-  qspace_number_t<T> ret;
-  // pre-scaling up
-  T2x tmp = static_cast<typename number_traits<T>::T2x>(lhs.val) << qspace_number_t<T>::frac_bits();
-  // rounding
-  if ((tmp >= 0 && rhs.val >= 0) || (tmp < 0 && rhs.val < 0)) {
-    tmp += rhs.val / 2;
-  } else {
-    tmp -= rhs.val / 2;
-  }
-  ret.val = static_cast<T>(tmp / rhs.val);
-  return ret;
+  return lhs.div(rhs);
 }
 
 // XXX arbitrary values..
@@ -126,3 +208,4 @@ using qnum16_t = qspace_number_t<int16_t>;
 using qnum32_t = qspace_number_t<int32_t>;
 
 }
+

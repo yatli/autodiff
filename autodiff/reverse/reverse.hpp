@@ -393,7 +393,7 @@ struct DivExpr : BinaryExpr<T>
 
     virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
     {
-        const auto aux1 = 1.0 / r->val;
+        const auto aux1 = T(1.0) / r->val;
         const auto aux2 = -l->val * aux1 * aux1;
         l->propagate(derivatives, wprime * aux1);
         r->propagate(derivatives, wprime * aux2);
@@ -401,7 +401,7 @@ struct DivExpr : BinaryExpr<T>
 
     virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
     {
-        const auto aux1 = 1.0 / r;
+        const auto aux1 = T(1.0) / r;
         const auto aux2 = -l * aux1 * aux1;
         l->propagate(derivatives, wprime * aux1);
         r->propagate(derivatives, wprime * aux2);
@@ -877,6 +877,9 @@ struct var
 
     /// Construct a var object variable with given value
     var(T val) : expr(std::make_shared<ParameterExpr<T>>(val)) {}
+
+    /// Construct a var object variable with given int
+    var(typename std::enable_if_t<!std::is_same_v<T,int>, int> val) : expr(std::make_shared<ParameterExpr<T>>(static_cast<T>(val))) { }
 
     /// Construct a var object variable with given expression
     var(const ExprPtr<T>& expr) : expr(std::make_shared<VariableExpr<T>>(expr)) {}

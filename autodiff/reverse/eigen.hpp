@@ -102,9 +102,25 @@ EIGEN_MAKE_TYPEDEFS_ALL_SIZES(autodiff::var<T>, var)
 
 namespace autodiff {
 
+/// Return the gradient matrix of variable y with respect to variables x.
+template<typename vars, typename T>
+std::enable_if_t<!vars::IsVectorAtCompileTime, Eigen::MatrixXvar<T>> 
+gradient(const var<T>& y, const vars& x)
+{
+    const auto r = x.rows();
+    const auto c = x.cols();
+    Eigen::MatrixXvar<T> dydx(r, c);
+    Derivatives<T> dyd = derivatives(y);
+    for(auto i = 0; i < r; ++i)
+      for (auto j = 0; j < c; ++j)
+        dydx(i, j) = dyd(x(i, j));
+    return dydx;
+}
+
 /// Return the gradient vector of variable y with respect to variables x.
 template<typename vars, typename T>
-Eigen::RowVectorXvar<T> gradient(const var<T>& y, const vars& x)
+std::enable_if_t<vars::IsVectorAtCompileTime, Eigen::RowVectorXvar<T>> 
+gradient(const var<T>& y, const vars& x)
 {
     const auto n = x.size();
     Eigen::RowVectorXvar<T> dydx(n);

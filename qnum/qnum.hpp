@@ -19,6 +19,10 @@ template <> struct number_traits<int32_t> {
   typedef int64_t T2x; 
   typedef uint32_t Tu;
 };
+template <> struct number_traits<int64_t> { 
+  typedef int64_t T2x; 
+  typedef uint64_t Tu;
+};
 
 /// A Q-Space number consists of 3 parts:
 /// - s: the sign bit
@@ -67,14 +71,14 @@ public:
 
   qspace_number_t<T> add(const qspace_number_t<T>& rhs) const {
     qspace_number_t<T> ret;
-    T2x tmp = val + rhs.val;
+    T2x tmp = T2x(val) + T2x(rhs.val);
     ret.val = saturate(tmp);
     return ret;
   }
 
   qspace_number_t<T> sub(const qspace_number_t<T>& rhs) const {
     qspace_number_t<T> ret;
-    T2x tmp = val - rhs.val;
+    T2x tmp = T2x(val) - T2x(rhs.val);
     ret.val = saturate(tmp);
     return ret;
   }
@@ -201,11 +205,59 @@ qspace_number_t<T> operator / (const qspace_number_t<T> &lhs, const qspace_numbe
 // XXX arbitrary values..
 template <> constexpr int qspace_number_t<int8_t>::ext_bits() { return 0; }
 template <> constexpr int qspace_number_t<int16_t>::ext_bits() { return 1; }
-template <> constexpr int qspace_number_t<int32_t>::ext_bits() { return 2; }
+template <> constexpr int qspace_number_t<int32_t>::ext_bits() { return 4; }
+template <> constexpr int qspace_number_t<int64_t>::ext_bits() { return 8; }
 
 using qnum8_t  = qspace_number_t<int8_t>;
 using qnum16_t = qspace_number_t<int16_t>;
 using qnum32_t = qspace_number_t<int32_t>;
+using qnum64_t = qspace_number_t<int64_t>;
 
 }
 
+namespace std
+{
+  using namespace qnum;
+
+  template<typename T>
+  qspace_number_t<T> log10(const qspace_number_t<T>& q) noexcept
+  {
+    return log10(q.to_double());
+  }
+
+  template<typename T>
+  qspace_number_t<T> log(const qspace_number_t<T>& q) noexcept
+  {
+    return log(q.to_double());
+  }
+
+  template<typename T>
+  qspace_number_t<T> exp(const qspace_number_t<T>& q) noexcept
+  {
+    return exp(q.to_double());
+  }
+
+  template<typename T>
+  qspace_number_t<T> abs(const qspace_number_t<T>& q) noexcept
+  {
+    auto val = q.val;
+    if (val < 0) val = -val;
+    return qspace_number_t<T>::from_literal(val);
+  }
+
+  template<typename T>
+  qspace_number_t<T> copysign(const qspace_number_t<T>& a, const qspace_number_t<T>& b) noexcept
+  {
+    auto val = a.val;
+    if (b.val < 0) val = -val;
+    return qspace_number_t<T>::from_literal(val);
+  }
+
+  template<typename T>
+  qspace_number_t<T> copysign(const double& a, const qspace_number_t<T>& b) noexcept
+  {
+    qspace_number_t<T> a_ = a;
+    if (b.val < 0) a_ = -a_;
+    return a_;
+  }
+}

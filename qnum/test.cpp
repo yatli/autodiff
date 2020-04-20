@@ -1,31 +1,4 @@
-#include <iostream>
-#include <ctime>
-using namespace std;
-
-#include <Eigen/Core>
-using namespace Eigen;
-
-#include <autodiff/reverse.hpp>
-#include <autodiff/reverse/eigen.hpp>
-using namespace autodiff;
-
-#include "qnum.hpp"
-#include "eigen.hpp"
-using namespace qnum;
-
-#define debug_dump(x) \
-  do { std::cout << #x << " = " << x << std::endl; } while (false)
-
-template<typename T>
-VectorXvar<T> forward_pass(const VectorXvar<T>& x, const MatrixXvar<T>& W, const VectorXvar<T>& b)
-{
-  return W * x + b;
-}
-
-template<typename T, typename U>
-T silly(const U x) {
-  return T(x);
-}
+#include "common.hpp"
 
 void sanity_check() {
   debug_dump(std::numeric_limits<int32_t>::digits);
@@ -42,6 +15,17 @@ void sanity_check() {
   debug_dump(qnum32_t(0.001));
   debug_dump(qnum32_t(0.0001));
   debug_dump(qnum32_t(0.00001));
+
+  debug_dump(qnum32_t(0.12) + qnum32_t(0.3456));
+  debug_dump(qnum32_t(-0.151248) * qnum32_t(2.4));
+
+  //for (qnum8_t i = -1.0; i < 0.99; i = i.next()) {
+  //  debug_dump(i);
+  //}
+
+  //for (qnum16_t i = -1.0; i < 0.99; i = i.next()) {
+  //  debug_dump(i);
+  //}
 }
 
 void vector_check() {
@@ -55,32 +39,50 @@ void vector_check() {
   debug_dump(W * x);
 }
 
+template<typename T>
 void autodiff_check() {
   int vec_size = 128;
-  VectorXvar<qnum16_t> x = VectorXvar<qnum16_t>::Random(vec_size);
-  MatrixXvar<qnum16_t> W = MatrixXvar<qnum16_t>::Random(vec_size, vec_size);
-  VectorXvar<qnum16_t> b = VectorXvar<qnum16_t>::Random(vec_size);
+  int vec_size2 = 10;
+  VectorXvar<T> x = VectorXvar<T>::Random(vec_size);
+  MatrixXvar<T> W1 = MatrixXvar<T>::Random(vec_size, vec_size) * 0.05;
+  VectorXvar<T> b1 = VectorXvar<T>::Random(vec_size) * 0.05;
+  MatrixXvar<T> W2 = MatrixXvar<T>::Random(vec_size2, vec_size) * 0.05;
+  VectorXvar<T> b2 = VectorXvar<T>::Random(vec_size2) * 0.05;
 
   ////try autodiff
-  VectorXvar<qnum16_t> y = forward_pass(x, W, b);
-  var<qnum16_t> sum = y.sum();
-  auto dsum_dx = gradient(sum, x);
+  VectorXvar<T> x1 = fc_layer(x, W1, act_sigmoid);
+  VectorXvar<T> y = fc_layer(x1, W2, act_softmax);
+  VectorXvar<T> y_rand = VectorXvar<T>::Zero(vec_size2);
+  y_rand[0] = T(1.0);
 
-  std::cout << dsum_dx << std::endl;
+  //auto loss = loss_l2(y, y_rand);
+  auto loss = loss_mse(y, y_rand);
+  auto gw2 = gradient(loss, W2);
+  auto gb2 = gradient(loss, b2);
+  auto gw1 = gradient(loss, W1);
+  auto gb1 = gradient(loss, b1);
 }
 
 #define run(x) \
   do { \
+    chrono::high_resolution_clock clock; \
     std::cout << "---------- run " << #x << " -----------" << std::endl; \
+    auto t1 = clock.now(); \
     x(); \
+    auto t2 = clock.now(); \
+    std::cout << "---------- completed " << #x << " ( " << (chrono::duration_cast<chrono::milliseconds>(t2 - t1)).count() << "ms ) -----------" << std::endl; \
   } while (false)
 
 int main(int argc, char** argv) {
   srand(time(nullptr));
 
-  run(sanity_check);
-  run(vector_check);
-  run(autodiff_check);
+  //run(sanity_check);
+  //run(vector_check);
+  run(autodiff_check<qnum64_t>);
+  run(autodiff_check<qnum32_t>);
+  run(autodiff_check<qnum16_t>);
+  //run(autodiff_check<double>);
+  //run(autodiff_check<float>);
 
   return 0;
 }

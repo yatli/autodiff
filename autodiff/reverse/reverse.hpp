@@ -68,6 +68,8 @@ template<typename T> struct PowExpr;
 template<typename T> struct SqrtExpr;
 template<typename T> struct AbsExpr;
 template<typename T> struct ErfExpr;
+template<typename T> struct SigmoidExpr;
+template<typename T> struct ReluExpr;
 
 template<typename T>
 using ExprPtr = std::shared_ptr<const Expr<T>>;
@@ -251,16 +253,14 @@ struct ParameterExpr : Expr<T>
 
     virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
     {
-        const auto it = derivatives.find(this);
-        if(it != derivatives.end()) it->second += wprime;
-        else derivatives.insert({ this, wprime });
+        const auto& [it, ins] = derivatives.insert({ this, wprime });
+        if (!ins) it->second += wprime;
     }
 
     virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
     {
-        const auto it = derivatives.find(this);
-        if(it != derivatives.end()) it->second = it->second + wprime;
-        else derivatives.insert({ this, wprime });
+        const auto& [it, ins] = derivatives.insert({ this, wprime });
+        if (!ins) it->second = it->second + wprime;
     }
 };
 
@@ -273,17 +273,15 @@ struct VariableExpr : Expr<T>
 
     virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
     {
-        const auto it = derivatives.find(this);
-        if(it != derivatives.end()) it->second += wprime;
-        else derivatives.insert({ this, wprime });
+        const auto& [it, ins] = derivatives.insert({ this, wprime });
+        if (!ins) it->second += wprime;
         expr->propagate(derivatives, wprime);
     }
 
     virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
     {
-        const auto it = derivatives.find(this);
-        if(it != derivatives.end()) it->second = it->second + wprime;
-        else derivatives.insert({ this, wprime });
+        const auto& [it, ins] = derivatives.insert({ this, wprime });
+        if (!ins) it->second = it->second + wprime;
         expr->propagate(derivatives, wprime);
     }
 };
@@ -714,6 +712,40 @@ struct ErfExpr : UnaryExpr<T>
     }
 };
 
+template <typename T>
+struct SigmoidExpr : UnaryExpr<T>
+{
+    SigmoidExpr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+
+    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    {
+        x->propagate(derivatives, wprime / (std::exp(x->val) + std::exp(-x->val) + T(2.0)));
+    }
+
+    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    {
+        x->propagate(derivatives, wprime / (exp(x) + exp(-x) + T(2.0)));
+    }
+};
+
+template <typename T>
+struct ReLUExpr : UnaryExpr<T>
+{
+    ReLUExpr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+
+    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    {
+        const auto aux = x->val >= 0.0 ? T(1.0) : T(0.0);
+        x->propagate(derivatives, wprime * aux);
+    }
+
+    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    {
+        const auto aux = x->val >= 0.0 ? T(1.0) : T(0.0);
+        x->propagate(derivatives, wprime * aux);
+    }
+};
+
 //------------------------------------------------------------------------------
 // CONVENIENT FUNCTIONS
 //------------------------------------------------------------------------------
@@ -820,6 +852,14 @@ template <typename T>
 inline ExprPtr<T> erf(const ExprPtr<T>& x) { return std::make_shared<ErfExpr<T>>(std::erf(x->val), x); }
 
 //------------------------------------------------------------------------------
+// ACTIVATION FUNCTIONS
+//------------------------------------------------------------------------------
+template <typename T>
+inline ExprPtr<T> sigmoid(const ExprPtr<T>& x) { return std::make_shared<SigmoidExpr<T>>(T(1.0) / (T(1.0) + std::exp(-x->val)), x); }
+template <typename T>
+inline ExprPtr<T> relu(const ExprPtr<T>& x) { return std::make_shared<ReLUExpr<T>>(x->val >= T(0.0) ? x->val : T(0.0), x); }
+
+//------------------------------------------------------------------------------
 // COMPARISON OPERATORS
 //------------------------------------------------------------------------------
 template <typename T>
@@ -873,7 +913,7 @@ struct var
     ExprPtr<T> expr;
 
     /// Construct a default var object variable
-    var() : var(0.0) {}
+    var() : var(T(0.0)) {}
 
     /// Construct a var object variable with given value
     var(T val) : expr(std::make_shared<ParameterExpr<T>>(val)) {}
@@ -1059,6 +1099,14 @@ template <typename T>
 inline ExprPtr<T> imag(const var<T>& x) { return imag(x.expr); }
 template <typename T>
 inline ExprPtr<T> erf(const var<T>& x) { return erf(x.expr); }
+
+//------------------------------------------------------------------------------
+// ACTIVATION FUNCTIONS
+//------------------------------------------------------------------------------
+template <typename T>
+inline ExprPtr<T> sigmoid(const var<T>& x) { return sigmoid(x.expr); }
+template <typename T>
+inline ExprPtr<T> relu(const var<T>& x) { return relu(x.expr); }
 
 /// Return the value of a variable x.
 template <typename T>

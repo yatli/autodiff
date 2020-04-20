@@ -82,13 +82,3 @@ namespace Eigen
 
 }
 
-namespace std
-{
-
-  template<typename T>
-  qspace_number_t<T> log10(const qspace_number_t<T>& q)
-  {
-    return log10(q.to_double());
-  }
-
-}

@@ -98,9 +98,11 @@ Variable<T> loss_crossent(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
   const auto n = y1.size();
   Variable<T> sum = 0;
   for (auto i = 0; i < n; ++i) {
-    sum -= y1[i] * log(y2[i]);
+    if (y1[i].expr->val == 1) {
+      sum += log(y2[i]);
+    }
   }
-  return sum;
+  return -sum;
 }
 
 template<typename T>

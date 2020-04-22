@@ -21,31 +21,21 @@ struct mlp_t {
   }
 
   void backward(const Variable<T>& loss) {
-    cout << "derivatives" << endl;
+    //cout << "rewrite" << endl;
+    //loss.expr->rewrite();
+    loss.expr->propagate(0.01);
     for (int i = 0; i < sz_input; ++i) {
       for (int j = 0; j < sz_hidden; ++j) {
         auto& e = w1(j, i + 1);
+        e = (e - e.grad())->val;
         e.seed();
       }
     }
     for (int i = 0; i < sz_hidden; ++i) {
       for (int j = 0; j < sz_output; ++j) {
-        auto& e = w2(j, i + 1);
+        auto& e = w1(j, i + 1);
+        e = (e - e.grad())->val;
         e.seed();
-      }
-    }
-    loss.expr->propagate(0.001);
-    cout << "backward" << endl;
-    for (int i = 0; i < sz_input; ++i) {
-      for (int j = 0; j < sz_hidden; ++j) {
-        auto& e = w1(j, i + 1);
-        e -= e.grad();
-      }
-    }
-    for (int i = 0; i < sz_hidden; ++i) {
-      for (int j = 0; j < sz_output; ++j) {
-        auto& e = w1(j, i + 1);
-        e -= e.grad();
       }
     }
   }
@@ -54,22 +44,22 @@ struct mlp_t {
 
 int main(int argc, char* argv[]) {
   cout << "loading data..." << endl;
-  auto ptrain = load_train<float>();
+  auto ptrain = load_train<qnum8_t>();
   cout << "initializing network..." << endl;
-  mlp_t<float> net(28*28, 128, 10);
+  mlp_t<qnum8_t> net(28*28, 128, 10);
 
   for (int epoch = 0;; ++epoch) {
     cout << "epoch " << epoch << endl;
+    int smp = 0;
     for (auto i : ptrain->shuffle()) {
       auto img = ptrain->imgs[i];
       auto label = ptrain->labels[i];
-      cout << "forward" << endl;
       auto label_predict = net.forward(img);
       auto loss = loss_crossent(label, label_predict);
-      debug_dump(label);
-      debug_dump(label_predict);
-      debug_dump(loss);
-      cout << "backward" << endl;
+      //debug_dump(label);
+      //debug_dump(label_predict);
+      cout << "loss = " << setw(10) << loss << ", sample " << setw(5) << smp << "/60000" << endl;
+      smp++;
       net.backward(loss);
     }
   }

@@ -1,5 +1,7 @@
 add_executable(smoketest test.cpp)
 add_executable(train train.cpp)
+add_executable(rewritetest rewritetest.cpp)
 target_compile_definitions(smoketest PRIVATE EIGEN_MATRIXBASE_PLUGIN=\"${CMAKE_CURRENT_SOURCE_DIR}/matrix.hpp\")
 target_include_directories(smoketest PRIVATE ${CMAKE_SOURCE_DIR} ${EIGEN3_INCLUDE_DIR})
 target_include_directories(train PRIVATE ${CMAKE_SOURCE_DIR} ${EIGEN3_INCLUDE_DIR})
+target_include_directories(rewritetest PRIVATE ${CMAKE_SOURCE_DIR} ${EIGEN3_INCLUDE_DIR})

@@ -35,6 +35,10 @@
 #include <cmath>
 #include <cstddef>
 #include <memory>
+#include <vector>
+#include <algorithm>
+#include <iostream>
+#include <iomanip>
 
 // autodiff includes
 #include <autodiff/common/meta.hpp>
@@ -57,6 +61,7 @@ template<typename T> struct ConstantExpr;
 template<typename T> struct UnaryExpr;
 template<typename T> struct NegativeExpr;
 template<typename T> struct BinaryExpr;
+template<typename T> struct SumExpr;
 template<typename T> struct AddExpr;
 template<typename T> struct SubExpr;
 template<typename T> struct MulExpr;
@@ -233,12 +238,26 @@ struct Expr
     /// Update the contribution of this expression in the derivative of the root node of the expression tree.
     /// @param wprime The derivative of the root expression node w.r.t. the child expression of this expression node (as an expression).
     virtual void propagatex(const ExprPtr<T>& wprime) = 0;
+
+    virtual ExprPtr<T> rewrite() { return nullptr; }
+
+    virtual const char* name() = 0;
+
+    virtual void print(int indent) 
+    { 
+      std::cout << std::string(indent, ' ') << name() << std::endl;
+    }
 };
+
+#define DECLARE_NAME(x) \
+    virtual const char* name() { return #x; }
 
 /// The node in the expression tree representing either an independent or dependent variable.
 template<typename T>
 struct VariableExpr : Expr<T>
 {
+    DECLARE_NAME(VariableExpr);
+
     /// The derivative of the root expression node with respect to this variable.
     T grad = {};
 
@@ -253,6 +272,8 @@ struct VariableExpr : Expr<T>
 template<typename T>
 struct IndependentVariableExpr : VariableExpr<T>
 {
+    DECLARE_NAME(IndependentVariableExpr);
+
     // Using declarations for data members of base class
     using VariableExpr<T>::grad;
     using VariableExpr<T>::gradx;
@@ -278,6 +299,8 @@ struct IndependentVariableExpr : VariableExpr<T>
 template<typename T>
 struct DependentVariableExpr : VariableExpr<T>
 {
+    DECLARE_NAME(DependentVariableExpr);
+
     // Using declarations for data members of base class
     using VariableExpr<T>::grad;
     using VariableExpr<T>::gradx;
@@ -302,11 +325,27 @@ struct DependentVariableExpr : VariableExpr<T>
         gradx = gradx + wprime;
         expr->propagatex(wprime);
     }
+
+    virtual ExprPtr<T> rewrite() {
+      auto child = expr->rewrite();
+      if(child) {
+        expr = child;
+      }
+      return nullptr;
+    }
+
+    virtual void print(int indent) 
+    { 
+      this->Expr<T>::print(indent);
+      expr->print(indent + 2);
+    }
 };
 
 template<typename T>
 struct ConstantExpr : Expr<T>
 {
+    DECLARE_NAME(ConstantExpr);
+
     using Expr<T>::Expr;
 
     virtual void propagate(const T& wprime)
@@ -319,14 +358,32 @@ struct ConstantExpr : Expr<T>
 template<typename T>
 struct UnaryExpr : Expr<T>
 {
+    DECLARE_NAME(UnaryExpr);
+
     ExprPtr<T> x;
 
     UnaryExpr(const T& val, const ExprPtr<T>& x) : Expr<T>(val), x(x) {}
+
+    virtual ExprPtr<T> rewrite() {
+      auto child = x->rewrite();
+      if(child) {
+        x = child;
+      }
+      return nullptr;
+    }
+
+    virtual void print(int indent) 
+    { 
+      this->Expr<T>::print(indent);
+      x->print(indent + 2);
+    }
 };
 
 template<typename T>
 struct NegativeExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(NegativeExpr);
+
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
 
@@ -346,14 +403,155 @@ struct NegativeExpr : UnaryExpr<T>
 template<typename T>
 struct BinaryExpr : Expr<T>
 {
+    DECLARE_NAME(BinaryExpr);
+
     ExprPtr<T> l, r;
 
     BinaryExpr(const T& val, const ExprPtr<T>& l, const ExprPtr<T>& r) : Expr<T>(val), l(l), r(r) {}
+
+    virtual ExprPtr<T> rewrite() {
+      auto cl = l->rewrite();
+      auto cr = r->rewrite();
+      if(cl) {
+        l = cl;
+      }
+      if(cr) {
+        r = cr;
+      }
+      return nullptr;
+    }
+
+    virtual void print(int indent) 
+    { 
+      this->Expr<T>::print(indent);
+      l->print(indent + 2);
+      r->print(indent + 2);
+    }
 };
+
+template<typename T>
+struct SumExpr : Expr<T>
+{
+  DECLARE_NAME(SumExpr);
+
+  std::vector<ExprPtr<T>> elements;
+
+  SumExpr(const T& val, const std::vector<ExprPtr<T>> es): Expr<T>(val), elements(es) {}
+
+  virtual void propagate(const T& wprime) 
+  {
+    for(auto x: elements) {
+      x->propagate(wprime);
+    }
+  }
+
+  virtual void propagatex(const ExprPtr<T>& wprime) 
+  {
+    for(auto x: elements) {
+      x->propagatex(wprime);
+    }
+  }
+
+  virtual ExprPtr<T> rewrite() 
+  {
+    for(int i = 0; i < elements.size(); ) 
+    {
+      auto ptr = elements[i].get();
+      auto add = dynamic_cast<AddExpr<T>*>(ptr);
+      auto sum = dynamic_cast<SumExpr<T>*>(ptr);
+      if (!add && !sum) {
+        ++i;
+        continue;
+      }
+      if(add) {
+        elements.push_back(add->l);
+        elements.push_back(add->r);
+      } else {
+        elements.insert(elements.end(), sum->elements.begin(), sum->elements.end());
+      }
+      elements.erase(elements.cbegin() + i);
+    }
+    return nullptr;
+  }
+
+  virtual void print(int indent) 
+  { 
+    this->Expr<T>::print(indent);
+    for(const auto &x: elements) {
+      x->print(indent + 2);
+    }
+  }
+};
+
+template<typename T>
+struct ProdExpr : Expr<T>
+{
+  DECLARE_NAME(ProdExpr);
+
+  std::vector<ExprPtr<T>> elements;
+
+  ProdExpr(const T& val, const std::vector<ExprPtr<T>> es): Expr<T>(val), elements(es) {}
+
+  virtual void propagate(const T& wprime) 
+  {
+    for (auto x: elements) {
+      auto w = wprime;
+      for(const auto &y: elements) {
+        if (y == x) continue;
+        w *= y->val;
+      }
+      x->propagate(w);
+    }
+  }
+
+  virtual void propagatex(const ExprPtr<T>& wprime) 
+  {
+    for (auto x: elements) {
+      auto w = wprime;
+      for(const auto &y: elements) {
+        if (y == x) continue;
+        w = w * y;
+      }
+      x->propagatex(w);
+    }
+  }
+
+  virtual ExprPtr<T> rewrite() 
+  {
+    for(int i = 0; i < elements.size(); ) 
+    {
+      auto ptr = elements[i].get();
+      auto mul = dynamic_cast<MulExpr<T>*>(ptr);
+      auto prod = dynamic_cast<ProdExpr<T>*>(ptr);
+      if (!mul && !prod) {
+        ++i;
+        continue;
+      }
+      if(mul) {
+        elements.push_back(mul->l);
+        elements.push_back(mul->r);
+      } else {
+        elements.insert(elements.end(), prod->elements.begin(), prod->elements.end());
+      }
+      elements.erase(elements.cbegin() + i);
+    }
+    return nullptr;
+  }
+
+  virtual void print(int indent) { 
+    this->Expr<T>::print(indent);
+    for(const auto &x: elements) {
+      x->print(indent + 2);
+    }
+  }
+};
+
 
 template<typename T>
 struct AddExpr : BinaryExpr<T>
 {
+    DECLARE_NAME(AddExpr);
+
     // Using declarations for data members of base class
     using BinaryExpr<T>::l;
     using BinaryExpr<T>::r;
@@ -371,11 +569,27 @@ struct AddExpr : BinaryExpr<T>
         l->propagatex(wprime);
         r->propagatex(wprime);
     }
+
+    virtual ExprPtr<T> rewrite() 
+    {
+      this->BinaryExpr<T>::rewrite();
+      auto ladd = dynamic_cast<AddExpr<T>*>(l.get());
+      auto radd = dynamic_cast<AddExpr<T>*>(r.get());
+      if (ladd || radd) {
+        std::vector<ExprPtr<T>> elements = {l, r};
+        auto sum = std::make_shared<SumExpr<T>>(this->val, elements);
+        sum->rewrite();
+        return sum;
+      } else {
+        return nullptr;
+      }
+    }
 };
 
 template<typename T>
 struct SubExpr : BinaryExpr<T>
 {
+    DECLARE_NAME(SubExpr);
     // Using declarations for data members of base class
     using BinaryExpr<T>::l;
     using BinaryExpr<T>::r;
@@ -397,6 +611,8 @@ struct SubExpr : BinaryExpr<T>
 template<typename T>
 struct MulExpr : BinaryExpr<T>
 {
+    DECLARE_NAME(MulExpr);
+
     // Using declarations for data members of base class
     using BinaryExpr<T>::l;
     using BinaryExpr<T>::r;
@@ -413,11 +629,27 @@ struct MulExpr : BinaryExpr<T>
         l->propagatex(wprime * r);
         r->propagatex(wprime * l);
     }
+
+    virtual ExprPtr<T> rewrite() 
+    {
+      this->BinaryExpr<T>::rewrite();
+      auto lmul = dynamic_cast<MulExpr<T>*>(l.get());
+      auto rmul = dynamic_cast<MulExpr<T>*>(r.get());
+      if (lmul || rmul) {
+        std::vector<ExprPtr<T>> elements = {l, r};
+        auto prod = std::make_shared<ProdExpr<T>>(this->val, elements);
+        prod->rewrite();
+        return prod;
+      } else {
+        return nullptr;
+      }
+    }
 };
 
 template<typename T>
 struct DivExpr : BinaryExpr<T>
 {
+    DECLARE_NAME(DivExpr);
     // Using declarations for data members of base class
     using BinaryExpr<T>::l;
     using BinaryExpr<T>::r;
@@ -443,6 +675,7 @@ struct DivExpr : BinaryExpr<T>
 template<typename T>
 struct SinExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(SinExpr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
 
@@ -462,6 +695,7 @@ struct SinExpr : UnaryExpr<T>
 template<typename T>
 struct CosExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(CosExpr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
 
@@ -481,6 +715,7 @@ struct CosExpr : UnaryExpr<T>
 template<typename T>
 struct TanExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(TanExpr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
 
@@ -502,6 +737,7 @@ struct TanExpr : UnaryExpr<T>
 template<typename T>
 struct SinhExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(SinhExpr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
 
@@ -521,6 +757,7 @@ struct SinhExpr : UnaryExpr<T>
 template<typename T>
 struct CoshExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(CoshExpr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
 
@@ -540,6 +777,7 @@ struct CoshExpr : UnaryExpr<T>
 template<typename T>
 struct TanhExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(TanhExpr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
 
@@ -561,6 +799,7 @@ struct TanhExpr : UnaryExpr<T>
 template<typename T>
 struct ArcSinExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(ArcSinExpr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
 
@@ -580,6 +819,7 @@ struct ArcSinExpr : UnaryExpr<T>
 template<typename T>
 struct ArcCosExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(ArcCosExpr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
 
@@ -599,6 +839,7 @@ struct ArcCosExpr : UnaryExpr<T>
 template<typename T>
 struct ArcTanExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(ArcTanExpr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
 
@@ -618,6 +859,7 @@ struct ArcTanExpr : UnaryExpr<T>
 template<typename T>
 struct ExpExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(ExpExpr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::UnaryExpr;
     using UnaryExpr<T>::val;
@@ -637,6 +879,7 @@ struct ExpExpr : UnaryExpr<T>
 template<typename T>
 struct LogExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(LogExpr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
     using UnaryExpr<T>::UnaryExpr;
@@ -655,6 +898,7 @@ struct LogExpr : UnaryExpr<T>
 template<typename T>
 struct Log10Expr : UnaryExpr<T>
 {
+    DECLARE_NAME(Log10Expr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
 
@@ -676,6 +920,7 @@ struct Log10Expr : UnaryExpr<T>
 template<typename T>
 struct PowExpr : BinaryExpr<T>
 {
+    DECLARE_NAME(PowExpr);
     // Using declarations for data members of base class
     using BinaryExpr<T>::val;
     using BinaryExpr<T>::l;
@@ -705,6 +950,7 @@ struct PowExpr : BinaryExpr<T>
 template<typename T>
 struct PowConstantLeftExpr : BinaryExpr<T>
 {
+    DECLARE_NAME(PowConstantLeftExpr);
     // Using declarations for data members of base class
     using BinaryExpr<T>::val;
     using BinaryExpr<T>::l;
@@ -726,6 +972,7 @@ struct PowConstantLeftExpr : BinaryExpr<T>
 template<typename T>
 struct PowConstantRightExpr : BinaryExpr<T>
 {
+    DECLARE_NAME(PowConstantRightExpr);
     // Using declarations for data members of base class
     using BinaryExpr<T>::val;
     using BinaryExpr<T>::l;
@@ -747,6 +994,7 @@ struct PowConstantRightExpr : BinaryExpr<T>
 template<typename T>
 struct SqrtExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(SqrtExpr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
 
@@ -766,6 +1014,7 @@ struct SqrtExpr : UnaryExpr<T>
 template<typename T>
 struct AbsExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(AbsExpr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
     using U = VariableValueType<T>;
@@ -788,6 +1037,7 @@ struct AbsExpr : UnaryExpr<T>
 template<typename T>
 struct ErfExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(ErfExpr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
 
@@ -811,11 +1061,13 @@ struct ErfExpr : UnaryExpr<T>
 template <typename T>
 struct SigmoidExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(SigmoidExpr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
     
     SigmoidExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
 
+    // XXX wrong! check this!
     virtual void propagate(const T& wprime)
     {
         x->propagate(wprime / (std::exp(x->val) + std::exp(-x->val) + T(2.0)));
@@ -830,6 +1082,7 @@ struct SigmoidExpr : UnaryExpr<T>
 template <typename T>
 struct ReLUExpr : UnaryExpr<T>
 {
+    DECLARE_NAME(ReLUExpr);
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
     
@@ -977,7 +1230,7 @@ struct Variable
     Variable(const U& val) : expr(std::make_shared<IndependentVariableExpr<T>>(val)) {}
 
     /// Construct a Variable object with given expression
-    Variable(const ExprPtr<T>& expr) : expr(std::make_shared<DependentVariableExpr<T>>(expr)) {}
+    Variable(const ExprPtr<T>& expr) : expr(expr) {}
 
     /// Return a pointer to the underlying VariableExpr object in this variable.
     auto __variableExpr() const { return static_cast<VariableExpr<T>*>(expr.get()); }
@@ -993,6 +1246,12 @@ struct Variable
 
     /// Reeet the derivative expression stored in this variable to zero expression.
     auto seedx() { __variableExpr()->gradx = constant<T>(0); }
+
+    /// Rewrite and simplify the expression.
+    void rewrite() {
+      auto new_expr = expr->rewrite();
+      if(new_expr) expr = new_expr;
+    }
 
     /// Implicitly convert this Variable object into an expression pointer.
     operator ExprPtr<T>() const { return expr; }

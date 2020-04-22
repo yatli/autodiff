@@ -9,7 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 
-constexpr auto c_mnist_dir = "F:/data/mnist";
+constexpr auto c_mnist_dir = "/media/data/mnist";
 constexpr auto c_mnist_train_img_file = "train-images.idx3-ubyte";
 constexpr auto c_mnist_train_label_file = "train-labels.idx1-ubyte";
 constexpr auto c_mnist_train_size = 60000;
@@ -60,7 +60,7 @@ const mnist_train_t<T>* load_train() {
     exit(-1);
   }
 
-  auto p = new mnist_train_t<T>();
+  mnist_train_t<T>* p = new mnist_train_t<T>();
 
   fread(buf, 16, 1, img_fp);
   fread(buf, 8, 1, label_fp);
@@ -77,8 +77,8 @@ const mnist_train_t<T>* load_train() {
   vector<int> idx(c_mnist_train_size);
   std::iota(idx.begin(), idx.end(), 0);
   std::for_each(idx.begin(), idx.end(), [&](auto i) {
-    p->imgs[i] = VectorXtvar<T>::Zero(c_mnist_imgh * c_mnist_imgw);
-    p->labels[i] = VectorXtvar<T>::Zero(10);
+    p->imgs[i].resize(c_mnist_imgh * c_mnist_imgw);// = VectorXtvar<T>()::Zero(c_mnist_imgh * c_mnist_imgw);
+    p->labels[i].resize(10);// = VectorXtvar<T>::Zero(10);
     for (int j = 0; j < 10; ++j) {
       if (labels[i] == j) {
         p->labels[i][j] = T(1.0);
@@ -88,7 +88,7 @@ const mnist_train_t<T>* load_train() {
       }
     }
     for (int j = 0; j < c_mnist_imgh * c_mnist_imgw; ++j) {
-      p->imgs[i][j] = T(imgs[i][j]);
+      p->imgs[i][j] = T(imgs[i][j] / 256.0);
     }
   });
 

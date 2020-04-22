@@ -204,8 +204,8 @@ qspace_number_t<T> operator / (const qspace_number_t<T> &lhs, const qspace_numbe
 }
 
 // XXX arbitrary values..
-template <> constexpr int qspace_number_t<int8_t>::ext_bits() { return 0; }
-template <> constexpr int qspace_number_t<int16_t>::ext_bits() { return 1; }
+template <> constexpr int qspace_number_t<int8_t>::ext_bits() { return 1; }
+template <> constexpr int qspace_number_t<int16_t>::ext_bits() { return 2; }
 template <> constexpr int qspace_number_t<int32_t>::ext_bits() { return 4; }
 template <> constexpr int qspace_number_t<int64_t>::ext_bits() { return 8; }
 

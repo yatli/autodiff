@@ -29,10 +29,10 @@ void sanity_check() {
 }
 
 void vector_check() {
-  VectorXvar<qnum16_t> x(5);
+  VectorXtvar<qnum16_t> x(5);
   x << qnum16_t(0.1), qnum16_t(0.12), qnum16_t(0.14), qnum16_t(0.16), qnum16_t(0.18);
 
-  MatrixXvar<qnum16_t> W = MatrixXvar<qnum16_t>::Random(5, 5);
+  MatrixXtvar<qnum16_t> W = MatrixXtvar<qnum16_t>::Random(5, 5);
 
   debug_dump(x);
   debug_dump(W);
@@ -43,24 +43,21 @@ template<typename T>
 void autodiff_check() {
   int vec_size = 128;
   int vec_size2 = 10;
-  VectorXvar<T> x = VectorXvar<T>::Random(vec_size);
-  MatrixXvar<T> W1 = MatrixXvar<T>::Random(vec_size, vec_size) * 0.05;
-  VectorXvar<T> b1 = VectorXvar<T>::Random(vec_size) * 0.05;
-  MatrixXvar<T> W2 = MatrixXvar<T>::Random(vec_size2, vec_size) * 0.05;
-  VectorXvar<T> b2 = VectorXvar<T>::Random(vec_size2) * 0.05;
+  VectorXtvar<T> x = VectorXtvar<T>::Random(vec_size);
+  MatrixXtvar<T> W1 = MatrixXtvar<T>::Random(vec_size, vec_size) * 0.05;
+  MatrixXtvar<T> W2 = MatrixXtvar<T>::Random(vec_size2, vec_size) * 0.05;
 
   ////try autodiff
-  VectorXvar<T> x1 = fc_layer(x, W1, act_sigmoid);
-  VectorXvar<T> y = fc_layer(x1, W2, act_softmax);
-  VectorXvar<T> y_rand = VectorXvar<T>::Zero(vec_size2);
+  VectorXtvar<T> x1 = fc_layer(x, W1, act_sigmoid);
+  VectorXtvar<T> y = fc_layer(x1, W2, act_softmax);
+  VectorXtvar<T> y_rand = VectorXtvar<T>::Zero(vec_size2);
   y_rand[0] = T(1.0);
 
   //auto loss = loss_l2(y, y_rand);
   auto loss = loss_mse(y, y_rand);
-  auto gw2 = gradient(loss, W2);
-  auto gb2 = gradient(loss, b2);
-  auto gw1 = gradient(loss, W1);
-  auto gb1 = gradient(loss, b1);
+  // XXX only for vecs now
+  //auto gw2 = gradient(loss, W2);
+  //auto gw1 = gradient(loss, W1);
 }
 
 #define run(x) \
@@ -76,13 +73,13 @@ void autodiff_check() {
 int main(int argc, char** argv) {
   srand(time(nullptr));
 
-  //run(sanity_check);
-  //run(vector_check);
+  run(sanity_check);
+  run(vector_check);
   run(autodiff_check<qnum64_t>);
   run(autodiff_check<qnum32_t>);
   run(autodiff_check<qnum16_t>);
-  //run(autodiff_check<double>);
-  //run(autodiff_check<float>);
+  run(autodiff_check<double>);
+  run(autodiff_check<float>);
 
   return 0;
 }

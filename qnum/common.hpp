@@ -5,25 +5,26 @@
 #include <chrono>
 using namespace std;
 
-#include <Eigen/Core>
+#include "qnum.hpp"
+#include "eigen.hpp"
+using namespace qnum;
 using namespace Eigen;
 
 #include <autodiff/reverse.hpp>
 #include <autodiff/reverse/eigen.hpp>
 using namespace autodiff;
 
-#include "qnum.hpp"
-#include "eigen.hpp"
-using namespace qnum;
+
+AUTODIFF_DEFINE_EIGEN_TYPEDEFS_ALL_SIZES_T(autodiff::Variable<T>, tvar);
 
 #define debug_dump(x) \
   do { std::cout << #x << " = " << x << std::endl; } while (false)
 
 template<typename T>
-VectorXvar<T> withb(const VectorXvar<T>& x) {
+VectorXtvar<T> withb(const VectorXtvar<T>& x) {
 
   const auto n = x.size();
-  VectorXvar<T> ret(n+1);
+  VectorXtvar<T> ret(n+1);
   ret[0] = T(1.0);
   for (auto i = 0; i < n; ++i) {
     ret[i+1] = x[i];
@@ -33,33 +34,33 @@ VectorXvar<T> withb(const VectorXvar<T>& x) {
 
 
 template<typename T>
-VectorXvar<T> act_sigmoid(const VectorXvar<T>& x) {
+VectorXtvar<T> act_sigmoid(const VectorXtvar<T>& x) {
   const auto n = x.size();
-  VectorXvar<T> ret(n);
+  VectorXtvar<T> ret(n);
   for (auto i = 0; i < n; ++i)
   {
-    ret[i] = autodiff::sigmoid(x[i]);
+    ret[i] = autodiff::reverse::sigmoid(x[i]);
   }
   return ret;
 }
 
 template<typename T>
-VectorXvar<T> act_relu(const VectorXvar<T>& x) {
+VectorXtvar<T> act_relu(const VectorXtvar<T>& x) {
   const auto n = x.size();
-  VectorXvar<T> ret(n);
+  VectorXtvar<T> ret(n);
   for (auto i = 0; i < n; ++i)
   {
-    ret[i] = autodiff::relu(x[i]);
+    ret[i] = autodiff::reverse::relu(x[i]);
   }
   return ret;
 }
 
 template<typename T>
-VectorXvar<T> act_softmax(const VectorXvar<T>& x) {
+VectorXtvar<T> act_softmax(const VectorXtvar<T>& x) {
 
   const auto n = x.size();
-  VectorXvar<T> ret(n);
-  var<T> sum = 0;
+  VectorXtvar<T> ret(n);
+  Variable<T> sum = 0;
   for (auto i = 0; i < n; ++i) {
     ret[i] = exp(x[i]);
     sum += ret[i];
@@ -71,9 +72,9 @@ VectorXvar<T> act_softmax(const VectorXvar<T>& x) {
 }
 
 template<typename T>
-var<T> loss_l2(const VectorXvar<T>& y1, const VectorXvar<T>& y2) {
+Variable<T> loss_l2(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
   const auto n = y1.size();
-  var<T> sum = 0;
+  Variable<T> sum = 0;
   for (auto i = 0; i < n; ++i) {
     sum += (y1[i] - y2[i]) * (y1[i] - y2[i]);
   }
@@ -81,10 +82,10 @@ var<T> loss_l2(const VectorXvar<T>& y1, const VectorXvar<T>& y2) {
 }
 
 template<typename T>
-var<T> loss_mse(const VectorXvar<T>& y1, const VectorXvar<T>& y2) {
+Variable<T> loss_mse(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
   const auto n = y1.size();
-  var<T> norm = T(1.0 / n);
-  var<T> sum = 0;
+  Variable<T> norm = T(1.0 / n);
+  Variable<T> sum = 0;
   for (auto i = 0; i < n; ++i) {
     auto diff = y1[i] - y2[i];
     sum += diff * diff * norm;
@@ -93,9 +94,9 @@ var<T> loss_mse(const VectorXvar<T>& y1, const VectorXvar<T>& y2) {
 }
 
 template<typename T>
-var<T> loss_crossent(const VectorXvar<T>& y1, const VectorXvar<T>& y2) {
+Variable<T> loss_crossent(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
   const auto n = y1.size();
-  var<T> sum = 0;
+  Variable<T> sum = 0;
   for (auto i = 0; i < n; ++i) {
     sum -= y1[i] * log(y2[i]);
   }
@@ -103,10 +104,10 @@ var<T> loss_crossent(const VectorXvar<T>& y1, const VectorXvar<T>& y2) {
 }
 
 template<typename T>
-var<T> loss_abs(const VectorXvar<T>& y1, const VectorXvar<T>& y2) {
+Variable<T> loss_abs(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
   const auto n = y1.size();
-  var<T> norm = T(1.0 / n);
-  var<T> sum = 0;
+  Variable<T> norm = T(1.0 / n);
+  Variable<T> sum = 0;
   for (auto i = 0; i < n; ++i) {
     sum += abs(y1[i] - y2[i]) * norm;
   }
@@ -114,9 +115,9 @@ var<T> loss_abs(const VectorXvar<T>& y1, const VectorXvar<T>& y2) {
 }
 
 template<typename T>
-VectorXvar<T> fc_layer(const VectorXvar<T>& x, const MatrixXvar<T>& W, VectorXvar<T>(f)(const VectorXvar<T>&))
+VectorXtvar<T> fc_layer(const VectorXtvar<T>& x, const MatrixXtvar<T>& W, VectorXtvar<T>(f)(const VectorXtvar<T>&))
 {
-  VectorXvar<T> v = W * x;
+  VectorXtvar<T> v = W * x;
   return f(v);
 }
 

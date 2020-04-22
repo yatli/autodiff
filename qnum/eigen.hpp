@@ -2,8 +2,10 @@
 
 #include <Eigen/Core>
 #include "qnum.hpp"
+#include "autodiff/reverse.hpp"
 
 using namespace qnum;
+using namespace autodiff;
 
 // Eigen specializations
 namespace Eigen
@@ -51,9 +53,9 @@ namespace Eigen
           if (x > y) return x;
 
           int rn = std::rand() * RAND_MAX + std::rand();
-          _Q::Tu xu = static_cast<_Q::Tu>(x.val);
-          _Q::Tu yu = static_cast<_Q::Tu>(y.val);
-          auto ru = static_cast<_Q::Tu>(rn) % yu - xu;
+          typename _Q::Tu xu = static_cast<typename _Q::Tu>(x.val);
+          typename _Q::Tu yu = static_cast<typename _Q::Tu>(y.val);
+          auto ru = static_cast<typename _Q::Tu>(rn) % yu - xu;
           return _Q::from_literal(static_cast<T>(ru));
         }
         static inline _Q run() {
@@ -62,20 +64,20 @@ namespace Eigen
         }
       };
 
-      template<typename T> struct random_impl<var<qspace_number_t<T>>>
+      template<typename T> struct random_impl<Variable<qspace_number_t<T>>>
         : random_default_impl
           <
-          var<qspace_number_t<T>>,
-          NumTraits<var<qspace_number_t<T>>>::IsComplex,
-          NumTraits<var<qspace_number_t<T>>>::IsInteger
+          Variable<qspace_number_t<T>>,
+          NumTraits<Variable<qspace_number_t<T>>>::IsComplex,
+          NumTraits<Variable<qspace_number_t<T>>>::IsInteger
           > 
       {
         typedef qspace_number_t<T> _Q;
-        static inline var<_Q> run(const var<_Q>& x, const var<_Q>& y) {
-          return var(random_impl<_Q>::run(x.expr->val, y.expr->val));
+        static inline Variable<_Q> run(const Variable<_Q>& x, const Variable<_Q>& y) {
+          return Variable<_Q>(random_impl<_Q>::run(x.expr->val, y.expr->val));
         }
-        static inline var<_Q> run() {
-          return var(random_impl<_Q>::run());
+        static inline Variable<_Q> run() {
+          return Variable<_Q>(random_impl<_Q>::run());
         }
       };
     }

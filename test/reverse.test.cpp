@@ -1,42 +1,61 @@
 // Catch includes
 #include "catch.hpp"
 
+// C++ includes
+#include <iostream>
+
 // autodiff includes
 #include <autodiff/reverse.hpp>
-using namespace autodiff;
+#include <autodiff/reverse/eigen.hpp>
 
-/// Convenient function used in the tests to calculate the derivative of a var<double>iable y with respect to a var<double>iable x.
-inline double grad(const var<double>& y, const var<double>& x)
+using autodiff::derivatives;
+using autodiff::gradient;
+using autodiff::hessian;
+using autodiff::val;
+using autodiff::var;
+using autodiff::wrt;
+
+using Eigen::MatrixXd;
+using Eigen::VectorXd;
+using Eigen::VectorXvar;
+
+/// Convenient function used in the tests to calculate the derivative of a variable y with respect to a variable x.
+inline auto grad(const var& y, var& x)
 {
-    const auto dyd = derivatives(y);
-    return dyd(x);
+    auto g = derivatives(y, wrt(x));
+    return val(g[0]);
 }
 
-/// Convenient function used in the tests to calculate the derivative of a var<double>iable y with respect to a var<double>iable x (for higher order derivatives).
-inline var<double> gradx(const var<double>& y, const var<double>& x)
+inline auto gradx(const var& y, var& x)
 {
-    const auto dyd = derivativesx(y);
-    return dyd(x);
+    auto g = derivativesx(y, wrt(x));
+    return g[0];
 }
 
-class approx : public Approx
+/// A helper class to deal with catch::Approx combined with autodiff::Variable number type.
+template<typename Var>
+auto approx(const Var& x) -> Approx
 {
-public:
-    using Approx::Approx;
-    approx(const var<double>& x) : Approx(val(x)) {}
-};
+    return Approx(val(x));
+}
 
-double val(autodiff::var<double> v) { return autodiff::val<double>(v); }
+namespace autodiff {
+namespace reverse {
 
-bool operator==(const var<double>& l, const Approx& r) { return val(l) == r; }
+/// A helper equal operator to deal with catch::Approx combined with autodiff::Variable number type.
+template<typename T>
+bool operator==(const Variable<T>& l, const Approx& r) { return val(l) == r; }
 
-TEST_CASE("autodiff::var<double> tests", "[var<double>]")
+} // namespace reverse
+} // namespace autodiff
+
+TEST_CASE("autodiff::var tests", "[var]")
 {
-    var<double> a = 10;
-    var<double> b = 20;
-    var<double> c = a;
-    var<double> x, y;
-    var<double> r;
+    var a = 10;
+    var b = 20;
+    var c = a;
+    var x, y;
+    var r;
 
     //------------------------------------------------------------------------------
     // TEST TRIVIAL DERIVATIVE CALCULATIONS
@@ -52,6 +71,7 @@ TEST_CASE("autodiff::var<double> tests", "[var<double>]")
     //------------------------------------------------------------------------------
     c = +a;
 
+    REQUIRE( val(c) == val(a) );
     REQUIRE( grad(c, a) == 1 );
 
     //------------------------------------------------------------------------------
@@ -59,21 +79,31 @@ TEST_CASE("autodiff::var<double> tests", "[var<double>]")
     //------------------------------------------------------------------------------
     c = -a;
 
+    REQUIRE( val(c) == -val(a) );
     REQUIRE( grad(c, a) == -1 );
 
     //------------------------------------------------------------------------------
-    // TEST WHEN IDENTICAL/EQUIVALENT var<double>IABLES ARE PRESENT
+    // TEST WHEN IDENTICAL/EQUIVALENT VARIABLES ARE PRESENT
     //------------------------------------------------------------------------------
     x = a;
-    c = a + x;
+    c = a*a + x;
 
-    REQUIRE( grad(c, a) == 2 );
-    REQUIRE( grad(c, x) == 2 );
+    REQUIRE( val(c) == val(a)*val(a) + val(x) );
+    REQUIRE( grad(c, a) == 2*val(a) + grad(x, a) );
+    REQUIRE( grad(c, x) == 2*val(a) * grad(a, x) + 1 );
+
+    //------------------------------------------------------------------------------
+    // TEST DERIVATIVES COMPUTATION AFTER CHANGING VAR VALUE
+    //------------------------------------------------------------------------------
+    a = 20.0; // a is now a new independent variable
+
+    REQUIRE( grad(c, a) == approx(0.0) );
+    REQUIRE( grad(c, x) == 2*val(x) + 1 );
 
     //------------------------------------------------------------------------------
     // TEST MULTIPLICATION OPERATOR (USING CONSTANT FACTOR)
     //------------------------------------------------------------------------------
-    c = -2.0*a;
+    c = -2*a;
 
     REQUIRE( grad(c, a) == -2 );
 
@@ -82,11 +112,58 @@ TEST_CASE("autodiff::var<double> tests", "[var<double>]")
     //------------------------------------------------------------------------------
     c = a / 3.0;
 
-    REQUIRE( grad(c, a) == 1.0/3.0 );
+    REQUIRE( grad(c, a) == approx(1.0/3.0) );
+
+    //------------------------------------------------------------------------------
+    // TEST DERIVATIVES WITH RESPECT TO DEPENDENT VARIABLES USING += -= *= /=
+    //------------------------------------------------------------------------------
+
+    a += 2.0;
+    c = a * b;
+
+    REQUIRE( grad(c, a) == approx(b) );
+
+    a -= 3.0;
+    c = a * b;
+
+    REQUIRE( grad(c, a) == approx(b) );
+
+    a *= 2.0;
+    c = a * b;
+
+    REQUIRE( grad(c, a) == approx(b) );
+
+    a /= 3.0;
+    c = a * b;
+
+    REQUIRE( grad(c, a) == approx(b) );
+
+    a += 2*b;
+    c = a * b;
+
+    REQUIRE( grad(c, a) == approx(b + a * grad(b, a)) );
+
+    a -= 3*b;
+    c = a * b;
+
+    REQUIRE( grad(c, a) == approx(b) );
+
+    a *= b;
+    c = a * b;
+
+    REQUIRE( grad(c, a) == approx(b) );
+
+    a /= b;
+    c = a * b;
+
+    REQUIRE( grad(c, a) == approx(b) );
 
     //------------------------------------------------------------------------------
     // TEST BINARY ARITHMETIC OPERATORS
     //------------------------------------------------------------------------------
+    a = 100.0;
+    b = 200.0;
+
     c = a + b;
 
     REQUIRE( grad(c, a) == 1.0 );
@@ -102,51 +179,52 @@ TEST_CASE("autodiff::var<double> tests", "[var<double>]")
     REQUIRE( grad(c, a) == -1.0 );
     REQUIRE( grad(c, b) ==  1.0 );
 
-    c = a + 1.0;
+    c = a + 1;
 
     REQUIRE( grad(c, a) == 1.0 );
 
     //------------------------------------------------------------------------------
     // TEST DERIVATIVES WITH RESPECT TO SUB-EXPRESSIONS
     //------------------------------------------------------------------------------
-    x = 2.0 * a + b;
+    x = 2 * a + b;
     r = x * x - a + b;
 
-    REQUIRE( grad(r, x) == approx(2.0 * x) );
-    REQUIRE( grad(r, a) == approx(2.0 * x * grad(x, a) - 1.0) );
-    REQUIRE( grad(r, b) == approx(2.0 * x * grad(x, b) + 1.0) );
+    REQUIRE( grad(r, x) == approx(2 * x) );
+    REQUIRE( grad(r, a) == approx(2 * x * grad(x, a) - 1.0) );
+    REQUIRE( grad(r, b) == approx(2 * x * grad(x, b) + 1.0) );
 
     //------------------------------------------------------------------------------
     // TEST COMPARISON OPERATORS
     //------------------------------------------------------------------------------
-    x = 10.0;
+    a = 10;
+    x = 10;
 
     REQUIRE( a == a );
     REQUIRE( a == x );
-    REQUIRE( a == 10.0 );
-    REQUIRE( 10.0 == a );
+    REQUIRE( a == 10 );
+    REQUIRE( 10 == a );
 
     REQUIRE( a != b );
-    REQUIRE( a != 20.0 );
-    REQUIRE( 20.0 != a );
+    REQUIRE( a != 20 );
+    REQUIRE( 20 != a );
 
     REQUIRE( a < b);
-    REQUIRE( a < 20.0);
+    REQUIRE( a < 20);
 
     REQUIRE( b > a );
-    REQUIRE( 20.0 > a );
+    REQUIRE( 20 > a );
 
     REQUIRE( a <= a);
     REQUIRE( a <= x);
     REQUIRE( a <= b);
-    REQUIRE( a <= 10.0);
-    REQUIRE( a <= 20.0);
+    REQUIRE( a <= 10);
+    REQUIRE( a <= 20);
 
     REQUIRE( a >= a );
     REQUIRE( x >= a );
     REQUIRE( b >= a );
-    REQUIRE( 10.0 >= a );
-    REQUIRE( 20.0 >= a );
+    REQUIRE( 10 >= a );
+    REQUIRE( 20 >= a );
 
     //--------------------------------------------------------------------------
     // TEST TRIGONOMETRIC FUNCTIONS
@@ -169,7 +247,7 @@ TEST_CASE("autodiff::var<double> tests", "[var<double>]")
     REQUIRE( grad(acos(x), x) == approx(-1.0 / std::sqrt(1 - val(x) * val(x))) );
 
     REQUIRE( val(atan(x)) == approx(std::atan(val(x))) );
-    REQUIRE( grad(atan(x), x) == approx(1.0 / (1.0 + val(x) * val(x))) );
+    REQUIRE( grad(atan(x), x) == approx(1.0 / (1 + val(x) * val(x))) );
 
     //--------------------------------------------------------------------------
     // TEST HYPERBOLIC FUNCTIONS
@@ -208,13 +286,16 @@ TEST_CASE("autodiff::var<double> tests", "[var<double>]")
     REQUIRE( grad(pow(2.0, x), x) == Approx(std::log(2.0) * std::pow(2.0, val(x))) );
 
     REQUIRE( val(pow(x, x)) == Approx(std::pow(val(x), val(x))) );
-    REQUIRE( grad(pow(x, x), x) == Approx(val((log(x) + 1.0) * pow(x, x))) );
+    REQUIRE( grad(pow(x, x), x) == Approx(val((log(x) + 1) * pow(x, x))) );
 
-    y = 2.0 * a;
+    y = 2 * a;
+
+    REQUIRE( y == Approx( 2 * val(a) ) );
+    REQUIRE( grad(y, a) == Approx( 2.0 ) );
 
     REQUIRE( val(pow(x, y)) == Approx(std::pow(val(x), val(y))) );
     REQUIRE( grad(pow(x, y), x) == Approx( val(y)/val(x) * std::pow(val(x), val(y)) ) );
-    REQUIRE( grad(pow(x, y), a) == Approx( std::log(val(x)) * grad(y, a) * std::pow(val(x), val(y)) ) );
+    REQUIRE( grad(pow(x, y), a) == Approx( std::pow(val(x), val(y)) * (val(y)/val(x) * grad(x, a) + std::log(val(x)) * grad(y, a)) ) );
     REQUIRE( grad(pow(x, y), y) == Approx( std::log(val(x)) * std::pow(val(x), val(y)) ) );
 
     //--------------------------------------------------------------------------
@@ -224,13 +305,12 @@ TEST_CASE("autodiff::var<double> tests", "[var<double>]")
     y = x;
 
     REQUIRE( val(abs(x)) == Approx(std::abs(val(x))) );
-    REQUIRE( val(grad(x, x)) == Approx(1.0) );
+    REQUIRE( grad(x, x) == Approx(1.0) );
 
     x = 0.5;
     constexpr double pi = 3.141592653589793238462643383279502884197169399375105820974;
     REQUIRE( val(erf(x)) == approx(std::erf(val(x))) );
     REQUIRE( grad(erf(x), x) == approx(2/sqrt(pi) * std::exp(-val(x)*val(x))) );
-
 
     //--------------------------------------------------------------------------
     // TEST HIGHER ORDER DERIVATIVES (2nd order)
@@ -243,7 +323,7 @@ TEST_CASE("autodiff::var<double> tests", "[var<double>]")
     REQUIRE( val(gradx(gradx(exp(x), x), x)) == Approx(val(exp(x))) );
     REQUIRE( val(gradx(gradx(pow(x, 2.0), x), x)) == Approx(2.0) );
     REQUIRE( val(gradx(gradx(pow(2.0, x), x), x)) == Approx(val(std::log(2.0) * std::log(2.0) * pow(2.0, x))) );
-    REQUIRE( val(gradx(gradx(pow(x, x), x), x)) == Approx(val(((log(x) + 1.0) * (log(x) + 1.0) + 1.0/x) * pow(x, x))) );
+    REQUIRE( val(gradx(gradx(pow(x, x), x), x)) == Approx(val(((log(x) + 1) * (log(x) + 1) + 1.0/x) * pow(x, x))) );
     REQUIRE( val(gradx(gradx(sqrt(x), x), x)) == Approx(val(-0.25 / (x * sqrt(x)))) );
 
     //--------------------------------------------------------------------------
@@ -251,4 +331,71 @@ TEST_CASE("autodiff::var<double> tests", "[var<double>]")
     //--------------------------------------------------------------------------
     REQUIRE( val(gradx(gradx(gradx(log(x), x), x), x)) == approx(val(2.0/(x * x * x))) );
     REQUIRE( val(gradx(gradx(gradx(exp(x), x), x), x)) == approx(val(exp(x))) );
+}
+
+TEST_CASE("autodiff::VectorXvar tests", "[VectorXvar]")
+{
+    SECTION("Testing VectorXvar")
+    {
+        var y;
+        VectorXd g;
+        MatrixXd H;
+        VectorXvar x(5);
+        x.setConstant(3.0);
+
+        //--------------------------------------------------------------------------
+        // TESTING GRADIENT AND HESSIAN WHEN y = sum(x)
+        //--------------------------------------------------------------------------
+        y = x.sum();
+        g = gradient(y, x);
+
+        CHECK( val(y) == approx(15.0) );
+        for(auto i = 0; i < x.size(); ++i)
+            CHECK( g[i] == approx(1.0) );
+
+        H = hessian(y, x, g);
+        for(auto i = 0; i < x.size(); ++i) {
+            CHECK( val(g[i]) == approx(1.0) );
+            for(auto j = 0; j < x.size(); ++j)
+                CHECK( H(i, j) == approx(0.0) );
+        }
+
+        //--------------------------------------------------------------------------
+        // TESTING GRADIENT AND HESSIAN WHEN y = ||x||^2
+        //--------------------------------------------------------------------------
+        x << 1, 2, 3, 4, 5;
+        y = x.cwiseProduct(x).sum();
+        g = gradient(y, x);
+
+        CHECK( val(y) == approx(1 + 2*2 + 3*3 + 4*4 + 5*5) );
+        for(auto i = 0; i < x.size(); ++i)
+            CHECK( val(g[i]) == approx(2 * x[i]) );
+
+        H = hessian(y, x, g);
+        for(auto i = 0; i < x.size(); ++i) {
+            CHECK( val(g[i]) == approx(2 * x[i]) );
+            for(auto j = 0; j < x.size(); ++j)
+                CHECK( H(i, j) == approx(i == j ? 2.0 : 0.0) );
+        }
+
+        //--------------------------------------------------------------------------
+        // TESTING GRADIENT AND HESSIAN WHEN y = prod(sin(x))
+        //--------------------------------------------------------------------------
+        y = x.array().sin().prod();
+        g = gradient(y, x);
+
+        CHECK( val(y) == approx(sin(1) * sin(2) * sin(3) * sin(4) * sin(5)) );
+        for(auto i = 0; i < x.size(); ++i)
+            CHECK( val(g[i]) == approx(y / tan(x[i])) );
+
+        H = hessian(y, x, g);
+        for(auto i = 0; i < x.size(); ++i) {
+            CHECK( val(g[i]) == approx(y / tan(x[i])) );
+            for(auto j = 0; j < x.size(); ++j)
+                if(i == j)
+                    CHECK( H(i, j) == Approx(val(g[i] / tan(x[i]) * (1.0 - 1.0/(cos(x[i]) * cos(x[i]))))) );
+                else
+                    CHECK( H(i, j) == Approx(val(g[j] / tan(x[i]))) );
+        }
+    }
 }

@@ -6,27 +6,23 @@ using namespace std;
 #include <autodiff/reverse.hpp>
 using namespace autodiff;
 
-// The multi-var<double>iable function for which derivatives are needed
-var<double> f(var<double> x, var<double> y, var<double> z)
+// The multi-variable function for which derivatives are needed
+var f(var x, var y, var z)
 {
-    return 1.0 + x + y + z + x*y + y*z + x*z + x*y*z + exp(x/y + y/z);
+    return 1 + x + y + z + x*y + y*z + x*z + x*y*z + exp(x/y + y/z);
 }
 
 int main()
 {
-    var<double> x = 1.0;                         // the input var<double>iable x
-    var<double> y = 2.0;                         // the input var<double>iable y
-    var<double> z = 3.0;                         // the input var<double>iable z
-    var<double> u = f(x, y, z);                  // the output var<double>iable u
+    var x = 1.0;         // the input variable x
+    var y = 2.0;         // the input variable y
+    var z = 3.0;         // the input variable z
+    var u = f(x, y, z);  // the output variable u
 
-    Derivatives<double> dud = derivatives(u);    // evaluate all derivatives of u
+    auto [ux, uy, uz] = derivatives(u, wrt(x, y, z)); // evaluate the derivatives of u with respect to x, y, z
 
-    var<double> dudx = dud(x);                   // extract the derivative du/dx
-    var<double> dudy = dud(y);                   // extract the derivative du/dy
-    var<double> dudz = dud(z);                   // extract the derivative du/dz
-
-    cout << "u = " << u << endl;         // print the evaluated output u
-    cout << "du/dx = " << dudx << endl;  // print the evaluated derivative du/dx
-    cout << "du/dy = " << dudy << endl;  // print the evaluated derivative du/dy
-    cout << "du/dz = " << dudz << endl;  // print the evaluated derivative du/dz
+    cout << "u = " << u << endl;    // print the evaluated output u
+    cout << "ux = " << ux << endl;  // print the evaluated derivative ux
+    cout << "uy = " << uy << endl;  // print the evaluated derivative uy
+    cout << "uz = " << uz << endl;  // print the evaluated derivative uz
 }

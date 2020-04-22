@@ -6,21 +6,19 @@ using namespace std;
 #include <autodiff/reverse.hpp>
 using namespace autodiff;
 
-// The single-var<double>iable function for which derivatives are needed
-var<double> f(var<double> x)
+// The single-variable function for which derivatives are needed
+var f(var x)
 {
-    return 1.0 + x + x*x + 1.0/x + log(x);
+    return 1 + x + x*x + 1/x + log(x);
 }
 
 int main()
 {
-    var<double> x = 2.0;                         // the input var<double>iable x
-    var<double> u = f(x);                        // the output var<double>iable u
+    var x = 2.0;   // the input variable x
+    var u = f(x);  // the output variable u
 
-    Derivatives<double> dud = derivatives(u);    // evaluate all derivatives of u
+    auto [ux] = derivatives(u, wrt(x)); // evaluate the derivative of u with respect to x
 
-    var<double> dudx = dud(x);                   // extract the derivative du/dx
-
-    cout << "u = " << u << endl;         // print the evaluated output u
-    cout << "du/dx = " << dudx << endl;  // print the evaluated derivative du/dx
+    cout << "u = " << u << endl;  // print the evaluated output variable u
+    cout << "ux = " << ux << endl;  // print the evaluated derivative ux
 }

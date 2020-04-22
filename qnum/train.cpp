@@ -3,8 +3,8 @@
 
 template<typename T>
 struct mlp_t {
-  using mat = MatrixXvar<T>;
-  using vec = VectorXvar<T>;
+  using mat = MatrixXtvar<T>;
+  using vec = VectorXtvar<T>;
   mat w1, w2;
   int sz_input, sz_hidden, sz_output;
 
@@ -20,17 +20,32 @@ struct mlp_t {
     return ox;
   }
 
-  void backward(const Derivatives<T> dyd) {
+  void backward(const Variable<T>& loss) {
+    cout << "derivatives" << endl;
     for (int i = 0; i < sz_input; ++i) {
       for (int j = 0; j < sz_hidden; ++j) {
         auto& e = w1(j, i + 1);
-        e -= dyd(e) * T(0.001);
+        e.seed();
+      }
+    }
+    for (int i = 0; i < sz_hidden; ++i) {
+      for (int j = 0; j < sz_output; ++j) {
+        auto& e = w2(j, i + 1);
+        e.seed();
+      }
+    }
+    loss.expr->propagate(0.001);
+    cout << "backward" << endl;
+    for (int i = 0; i < sz_input; ++i) {
+      for (int j = 0; j < sz_hidden; ++j) {
+        auto& e = w1(j, i + 1);
+        e -= e.grad();
       }
     }
     for (int i = 0; i < sz_hidden; ++i) {
       for (int j = 0; j < sz_output; ++j) {
         auto& e = w1(j, i + 1);
-        e -= dyd(e) * T(0.001);
+        e -= e.grad();
       }
     }
   }
@@ -54,10 +69,8 @@ int main(int argc, char* argv[]) {
       debug_dump(label);
       debug_dump(label_predict);
       debug_dump(loss);
-      cout << "derivatives" << endl;
-      auto dyd = derivatives(loss);
       cout << "backward" << endl;
-      net.backward(dyd);
+      net.backward(loss);
     }
   }
 

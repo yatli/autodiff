@@ -7,7 +7,7 @@
 //
 // Licensed under the MIT License <http://opensource.org/licenses/MIT>.
 //
-// Copyright (c) 2018-2019 Allan Leal
+// Copyright (c) 2018-2020 Allan Leal
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -30,20 +30,29 @@
 #pragma once
 
 // C++ includes
+#include <array>
+#include <cassert>
 #include <cmath>
-#include <functional>
+#include <cstddef>
 #include <memory>
-#include <unordered_map>
 
-/// autodiff namespace where @ref var and @ref grad are defined.
+// autodiff includes
+#include <autodiff/common/meta.hpp>
+
+/// autodiff namespace where @ref Variable and @ref grad are defined.
 namespace autodiff {}
 
 namespace autodiff {
 namespace reverse {
 
+using detail::EnableIf;
+using detail::For;
+using detail::isArithmetic;
+
 template<typename T> struct Expr;
-template<typename T> struct ParameterExpr;
 template<typename T> struct VariableExpr;
+template<typename T> struct IndependentVariableExpr;
+template<typename T> struct DependentVariableExpr;
 template<typename T> struct ConstantExpr;
 template<typename T> struct UnaryExpr;
 template<typename T> struct NegativeExpr;
@@ -68,1098 +77,1214 @@ template<typename T> struct PowExpr;
 template<typename T> struct SqrtExpr;
 template<typename T> struct AbsExpr;
 template<typename T> struct ErfExpr;
+template<typename T> struct Variable;
 template<typename T> struct SigmoidExpr;
-template<typename T> struct ReluExpr;
+template<typename T> struct ReLUExpr;
+
+template<typename T> using ExprPtr = std::shared_ptr<Expr<T>>;
+
+namespace traits {
 
 template<typename T>
-using ExprPtr = std::shared_ptr<const Expr<T>>;
+struct VariableValueTypeNotDefinedFor {};
 
 template<typename T>
-using DerivativesMap = std::unordered_map<const Expr<T>*, T>;
+struct VariableValueType;
+
 template<typename T>
-using DerivativesMapX = std::unordered_map<const Expr<T>*, ExprPtr<T>>;
+struct VariableValueType { using type = std::conditional_t<isArithmetic<T>, T, VariableValueTypeNotDefinedFor<T>>; };
+
+template<typename T>
+struct VariableValueType<Variable<T>> { using type = typename VariableValueType<T>::type; };
+
+template<typename T>
+struct VariableValueType<ExprPtr<T>> { using type = typename VariableValueType<T>::type; };
+
+template<typename T>
+struct VariableOrder { constexpr static auto value = 0; };
+
+template<typename T>
+struct VariableOrder<Variable<T>> { constexpr static auto value = 1 + VariableOrder<T>::value; };
+
+template<typename T>
+struct isVariable { constexpr static bool value = false; };
+
+template<typename T>
+struct isVariable<Variable<T>> { constexpr static bool value = true; };
+
+} // namespace traits
+
+template<typename T>
+using VariableValueType = typename traits::VariableValueType<T>::type;
+
+template<typename T>
+constexpr auto VariableOrder = traits::VariableOrder<T>::value;
+
+template<typename T>
+constexpr auto isVariable = traits::isVariable<T>::value;
 
 //------------------------------------------------------------------------------
 // CONVENIENT FUNCTIONS (DECLARATION ONLY)
 //------------------------------------------------------------------------------
 template<typename T>
-ExprPtr<T> constant(T val);
+ExprPtr<T> constant(const T& val);
 
 //------------------------------------------------------------------------------
 // ARITHMETIC OPERATORS (DECLARATION ONLY)
 //------------------------------------------------------------------------------
-template<typename T>
-ExprPtr<T> operator+(const ExprPtr<T>& r);
-template<typename T>
-ExprPtr<T> operator-(const ExprPtr<T>& r);
+template<typename T> ExprPtr<T> operator+(const ExprPtr<T>& r);
+template<typename T> ExprPtr<T> operator-(const ExprPtr<T>& r);
 
-template<typename T>
-ExprPtr<T> operator+(const ExprPtr<T>& l, const ExprPtr<T>& r);
-template<typename T>
-ExprPtr<T> operator-(const ExprPtr<T>& l, const ExprPtr<T>& r);
-template<typename T>
-ExprPtr<T> operator*(const ExprPtr<T>& l, const ExprPtr<T>& r);
-template<typename T>
-ExprPtr<T> operator/(const ExprPtr<T>& l, const ExprPtr<T>& r);
+template<typename T> ExprPtr<T> operator+(const ExprPtr<T>& l, const ExprPtr<T>& r);
+template<typename T> ExprPtr<T> operator-(const ExprPtr<T>& l, const ExprPtr<T>& r);
+template<typename T> ExprPtr<T> operator*(const ExprPtr<T>& l, const ExprPtr<T>& r);
+template<typename T> ExprPtr<T> operator/(const ExprPtr<T>& l, const ExprPtr<T>& r);
 
-template<typename T>
-ExprPtr<T> operator+(T l, const ExprPtr<T>& r);
-template<typename T>
-ExprPtr<T> operator-(T l, const ExprPtr<T>& r);
-template<typename T>
-ExprPtr<T> operator*(T l, const ExprPtr<T>& r);
-template<typename T>
-ExprPtr<T> operator/(T l, const ExprPtr<T>& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator+(const U& l, const ExprPtr<T>& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator-(const U& l, const ExprPtr<T>& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator*(const U& l, const ExprPtr<T>& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator/(const U& l, const ExprPtr<T>& r);
 
-template<typename T>
-ExprPtr<T> operator+(const ExprPtr<T>& l, T r);
-template<typename T>
-ExprPtr<T> operator-(const ExprPtr<T>& l, T r);
-template<typename T>
-ExprPtr<T> operator*(const ExprPtr<T>& l, T r);
-template<typename T>
-ExprPtr<T> operator/(const ExprPtr<T>& l, T r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator+(const ExprPtr<T>& l, const U& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator-(const ExprPtr<T>& l, const U& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator*(const ExprPtr<T>& l, const U& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator/(const ExprPtr<T>& l, const U& r);
 
 //------------------------------------------------------------------------------
 // TRIGONOMETRIC FUNCTIONS (DECLARATION ONLY)
 //------------------------------------------------------------------------------
-template<typename T>
-ExprPtr<T> sin(const ExprPtr<T>& x);
-template<typename T>
-ExprPtr<T> cos(const ExprPtr<T>& x);
-template<typename T>
-ExprPtr<T> tan(const ExprPtr<T>& x);
-template<typename T>
-ExprPtr<T> asin(const ExprPtr<T>& x);
-template<typename T>
-ExprPtr<T> acos(const ExprPtr<T>& x);
-template<typename T>
-ExprPtr<T> atan(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> sin(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> cos(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> tan(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> asin(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> acos(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> atan(const ExprPtr<T>& x);
 
 //------------------------------------------------------------------------------
 // HYPERBOLIC FUNCTIONS (DECLARATION ONLY)
 //------------------------------------------------------------------------------
-template<typename T>
-ExprPtr<T> sinh(const ExprPtr<T>& x);
-template<typename T>
-ExprPtr<T> cosh(const ExprPtr<T>& x);
-template<typename T>
-ExprPtr<T> tanh(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> sinh(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> cosh(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> tanh(const ExprPtr<T>& x);
 
 //------------------------------------------------------------------------------
 // EXPONENTIAL AND LOGARITHMIC FUNCTIONS (DECLARATION ONLY)
 //------------------------------------------------------------------------------
-template<typename T>
-ExprPtr<T> exp(const ExprPtr<T>& x);
-template<typename T>
-ExprPtr<T> log(const ExprPtr<T>& x);
-template<typename T>
-ExprPtr<T> log10(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> exp(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> log(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> log10(const ExprPtr<T>& x);
 
 //------------------------------------------------------------------------------
 // POWER FUNCTIONS (DECLARATION ONLY)
 //------------------------------------------------------------------------------
-template<typename T>
-ExprPtr<T> pow(const ExprPtr<T>& l, const ExprPtr<T>& r);
-template<typename T>
-ExprPtr<T> pow(T l, const ExprPtr<T>& r);
-template<typename T>
-ExprPtr<T> pow(const ExprPtr<T>& l, T r);
-template<typename T>
-ExprPtr<T> sqrt(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> sqrt(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> pow(const ExprPtr<T>& l, const ExprPtr<T>& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> pow(const U& l, const ExprPtr<T>& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> pow(const ExprPtr<T>& l, const U& r);
 
 //------------------------------------------------------------------------------
 // OTHER FUNCTIONS (DECLARATION ONLY)
 //------------------------------------------------------------------------------
-template<typename T>
-ExprPtr<T> abs(const ExprPtr<T>& x);
-template<typename T>
-ExprPtr<T> abs2(const ExprPtr<T>& x);
-template<typename T>
-ExprPtr<T> conj(const ExprPtr<T>& x);
-template<typename T>
-ExprPtr<T> real(const ExprPtr<T>& x);
-template<typename T>
-ExprPtr<T> imag(const ExprPtr<T>& x);
-template<typename T>
-ExprPtr<T> erf(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> abs(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> abs2(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> conj(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> real(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> imag(const ExprPtr<T>& x);
+template<typename T> ExprPtr<T> erf(const ExprPtr<T>& x);
 
 //------------------------------------------------------------------------------
 // COMPARISON OPERATORS (DECLARATION ONLY)
 //------------------------------------------------------------------------------
-template<typename T>
-bool operator==(const ExprPtr<T>& l, const ExprPtr<T>& r);
-template<typename T>
-bool operator!=(const ExprPtr<T>& l, const ExprPtr<T>& r);
-template<typename T>
-bool operator<=(const ExprPtr<T>& l, const ExprPtr<T>& r);
-template<typename T>
-bool operator>=(const ExprPtr<T>& l, const ExprPtr<T>& r);
-template<typename T>
-bool operator<(const ExprPtr<T>& l, const ExprPtr<T>& r);
-template<typename T>
-bool operator>(const ExprPtr<T>& l, const ExprPtr<T>& r);
+template<typename T> bool operator==(const ExprPtr<T>& l, const ExprPtr<T>& r);
+template<typename T> bool operator!=(const ExprPtr<T>& l, const ExprPtr<T>& r);
+template<typename T> bool operator<=(const ExprPtr<T>& l, const ExprPtr<T>& r);
+template<typename T> bool operator>=(const ExprPtr<T>& l, const ExprPtr<T>& r);
+template<typename T> bool operator<(const ExprPtr<T>& l, const ExprPtr<T>& r);
+template<typename T> bool operator>(const ExprPtr<T>& l, const ExprPtr<T>& r);
 
-template<typename T>
-bool operator==(T l, const ExprPtr<T>& r);
-template<typename T>
-bool operator!=(T l, const ExprPtr<T>& r);
-template<typename T>
-bool operator<=(T l, const ExprPtr<T>& r);
-template<typename T>
-bool operator>=(T l, const ExprPtr<T>& r);
-template<typename T>
-bool operator<(T l, const ExprPtr<T>& r);
-template<typename T>
-bool operator>(T l, const ExprPtr<T>& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator==(const U& l, const ExprPtr<T>& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator!=(const U& l, const ExprPtr<T>& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator<=(const U& l, const ExprPtr<T>& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator>=(const U& l, const ExprPtr<T>& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator<(const U& l, const ExprPtr<T>& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator>(const U& l, const ExprPtr<T>& r);
 
-template<typename T>
-bool operator==(const ExprPtr<T>& l, T r);
-template<typename T>
-bool operator!=(const ExprPtr<T>& l, T r);
-template<typename T>
-bool operator<=(const ExprPtr<T>& l, T r);
-template<typename T>
-bool operator>=(const ExprPtr<T>& l, T r);
-template<typename T>
-bool operator<(const ExprPtr<T>& l, T r);
-template<typename T>
-bool operator>(const ExprPtr<T>& l, T r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator==(const ExprPtr<T>& l, const U& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator!=(const ExprPtr<T>& l, const U& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator<=(const ExprPtr<T>& l, const U& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator>=(const ExprPtr<T>& l, const U& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator<(const ExprPtr<T>& l, const U& r);
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator>(const ExprPtr<T>& l, const U& r);
 
-template <typename T>
+/// The abstract type of any node type in the expression tree.
+template<typename T>
 struct Expr
 {
-    /// The numerical value of this expression.
-    T val;
+    /// The value of this expression node.
+    T val = {};
 
-    /// Construct an Expr object with given numerical value.
-    explicit Expr(T val) : val(val) {}
-
-    /// Update the contribution of this expression in the derivative of the root node of the expression tree.
-    /// @param derivatives The container where the derivatives of the root variable w.r.t. to leaf variables are stored.
-    /// @param wprime The derivative of the root variable w.r.t. a child expression of this expression.
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const = 0;
+    /// Construct an Expr object with given value.
+    explicit Expr(const T& val) : val(val) {}
 
     /// Update the contribution of this expression in the derivative of the root node of the expression tree.
-    /// @param derivatives The container where the derivatives of the root variable w.r.t. to leaf variables are stored.
-    /// @param wprime The derivative of the root variable w.r.t. a child expression of this expression (as an expression).
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const = 0;
+    /// @param wprime The derivative of the root expression node w.r.t. the child expression of this expression node.
+    virtual void propagate(const T& wprime) = 0;
+
+    /// Update the contribution of this expression in the derivative of the root node of the expression tree.
+    /// @param wprime The derivative of the root expression node w.r.t. the child expression of this expression node (as an expression).
+    virtual void propagatex(const ExprPtr<T>& wprime) = 0;
 };
 
-template <typename T>
-struct ParameterExpr : Expr<T>
-{
-    using Expr<T>::Expr;
-
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
-    {
-        const auto& [it, ins] = derivatives.insert({ this, wprime });
-        if (!ins) it->second += wprime;
-    }
-
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
-    {
-        const auto& [it, ins] = derivatives.insert({ this, wprime });
-        if (!ins) it->second = it->second + wprime;
-    }
-};
-
-template <typename T>
+/// The node in the expression tree representing either an independent or dependent variable.
+template<typename T>
 struct VariableExpr : Expr<T>
 {
-    ExprPtr<T> expr;
+    /// The derivative of the root expression node with respect to this variable.
+    T grad = {};
 
-    VariableExpr(const ExprPtr<T>& expr) : Expr(expr->val), expr(expr) {}
+    /// The derivative of the root expression node with respect to this variable (as an expression for higher-order derivatives).
+    ExprPtr<T> gradx = {};
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    /// Construct a VariableExpr object with given value.
+    VariableExpr(const T& val) : Expr<T>(val) {}
+};
+
+/// The node in the expression tree representing an independent variable.
+template<typename T>
+struct IndependentVariableExpr : VariableExpr<T>
+{
+    // Using declarations for data members of base class
+    using VariableExpr<T>::grad;
+    using VariableExpr<T>::gradx;
+
+    /// Construct an IndependentVariableExpr object with given value.
+    IndependentVariableExpr(const T& val) : VariableExpr<T>(val)
     {
-        const auto& [it, ins] = derivatives.insert({ this, wprime });
-        if (!ins) it->second += wprime;
-        expr->propagate(derivatives, wprime);
+        gradx = constant<T>(0.0); // TODO: Check if this can be done at the seed function.
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagate(const T& wprime)
     {
-        const auto& [it, ins] = derivatives.insert({ this, wprime });
-        if (!ins) it->second = it->second + wprime;
-        expr->propagate(derivatives, wprime);
+        grad += wprime;
+    }
+
+    virtual void propagatex(const ExprPtr<T>& wprime)
+    {
+        gradx = gradx + wprime;
     }
 };
 
-template <typename T>
+/// The node in the expression tree representing a dependent variable.
+template<typename T>
+struct DependentVariableExpr : VariableExpr<T>
+{
+    // Using declarations for data members of base class
+    using VariableExpr<T>::grad;
+    using VariableExpr<T>::gradx;
+
+    /// The expression tree that defines how the dependent variable is calculated.
+    ExprPtr<T> expr;
+
+    /// Construct an DependentVariableExpr object with given value.
+    DependentVariableExpr(const ExprPtr<T>& expr) : VariableExpr<T>(expr->val), expr(expr)
+    {
+        gradx = constant<T>(0.0); // TODO: Check if this can be done at the seed function.
+    }
+
+    virtual void propagate(const T& wprime)
+    {
+        grad += wprime;
+        expr->propagate(wprime);
+    }
+
+    virtual void propagatex(const ExprPtr<T>& wprime)
+    {
+        gradx = gradx + wprime;
+        expr->propagatex(wprime);
+    }
+};
+
+template<typename T>
 struct ConstantExpr : Expr<T>
 {
     using Expr<T>::Expr;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    virtual void propagate(const T& wprime)
     {}
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {}
 };
 
-template <typename T>
+template<typename T>
 struct UnaryExpr : Expr<T>
 {
     ExprPtr<T> x;
 
-    UnaryExpr(T val, const ExprPtr<T>& x) : Expr(val), x(x) {}
+    UnaryExpr(const T& val, const ExprPtr<T>& x) : Expr<T>(val), x(x) {}
 };
 
-template <typename T>
+template<typename T>
 struct NegativeExpr : UnaryExpr<T>
 {
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
+
     using UnaryExpr<T>::UnaryExpr;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    virtual void propagate(const T& wprime)
     {
-        x->propagate(derivatives, -wprime);
+        x->propagate(-wprime);
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        x->propagate(derivatives, -wprime);
+        x->propagatex(-wprime);
     }
 };
 
-template <typename T>
+template<typename T>
 struct BinaryExpr : Expr<T>
 {
     ExprPtr<T> l, r;
 
-    BinaryExpr(T val, const ExprPtr<T>& l, const ExprPtr<T>& r) : Expr(val), l(l), r(r) {}
+    BinaryExpr(const T& val, const ExprPtr<T>& l, const ExprPtr<T>& r) : Expr<T>(val), l(l), r(r) {}
 };
 
-template <typename T>
+template<typename T>
 struct AddExpr : BinaryExpr<T>
 {
+    // Using declarations for data members of base class
+    using BinaryExpr<T>::l;
+    using BinaryExpr<T>::r;
+
     using BinaryExpr<T>::BinaryExpr;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    virtual void propagate(const T& wprime)
     {
-        l->propagate(derivatives, wprime);
-        r->propagate(derivatives, wprime);
+        l->propagate(wprime);
+        r->propagate(wprime);
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        l->propagate(derivatives, wprime);
-        r->propagate(derivatives, wprime);
+        l->propagatex(wprime);
+        r->propagatex(wprime);
     }
 };
 
-template <typename T>
+template<typename T>
 struct SubExpr : BinaryExpr<T>
 {
+    // Using declarations for data members of base class
+    using BinaryExpr<T>::l;
+    using BinaryExpr<T>::r;
     using BinaryExpr<T>::BinaryExpr;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    virtual void propagate(const T& wprime)
     {
-        l->propagate(derivatives,  wprime);
-        r->propagate(derivatives, -wprime);
+        l->propagate( wprime);
+        r->propagate(-wprime);
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        l->propagate(derivatives,  wprime);
-        r->propagate(derivatives, -wprime);
+        l->propagatex( wprime);
+        r->propagatex(-wprime);
     }
 };
 
-template <typename T>
+template<typename T>
 struct MulExpr : BinaryExpr<T>
 {
+    // Using declarations for data members of base class
+    using BinaryExpr<T>::l;
+    using BinaryExpr<T>::r;
     using BinaryExpr<T>::BinaryExpr;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    virtual void propagate(const T& wprime)
     {
-        l->propagate(derivatives, wprime * r->val);
-        r->propagate(derivatives, wprime * l->val);
+        l->propagate(wprime * r->val);
+        r->propagate(wprime * l->val);
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        l->propagate(derivatives, wprime * r);
-        r->propagate(derivatives, wprime * l);
+        l->propagatex(wprime * r);
+        r->propagatex(wprime * l);
     }
 };
 
-template <typename T>
+template<typename T>
 struct DivExpr : BinaryExpr<T>
 {
+    // Using declarations for data members of base class
+    using BinaryExpr<T>::l;
+    using BinaryExpr<T>::r;
     using BinaryExpr<T>::BinaryExpr;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    virtual void propagate(const T& wprime)
     {
         const auto aux1 = T(1.0) / r->val;
         const auto aux2 = -l->val * aux1 * aux1;
-        l->propagate(derivatives, wprime * aux1);
-        r->propagate(derivatives, wprime * aux2);
+        l->propagate(wprime * aux1);
+        r->propagate(wprime * aux2);
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
         const auto aux1 = T(1.0) / r;
         const auto aux2 = -l * aux1 * aux1;
-        l->propagate(derivatives, wprime * aux1);
-        r->propagate(derivatives, wprime * aux2);
+        l->propagatex(wprime * aux1);
+        r->propagatex(wprime * aux2);
     }
 };
 
-template <typename T>
+template<typename T>
 struct SinExpr : UnaryExpr<T>
 {
-    SinExpr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    SinExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate(const T& wprime)
     {
-        x->propagate(derivatives, wprime * std::cos(x->val));
+        x->propagate(wprime * std::cos(x->val));
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        x->propagate(derivatives, wprime * cos(x));
+        x->propagatex(wprime * cos(x));
     }
 };
 
-template <typename T>
+template<typename T>
 struct CosExpr : UnaryExpr<T>
 {
-    CosExpr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    CosExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate(const T& wprime)
     {
-        x->propagate(derivatives, -wprime * std::sin(x->val));
+        x->propagate(-wprime * std::sin(x->val));
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        x->propagate(derivatives, -wprime * sin(x));
+        x->propagatex(-wprime * sin(x));
     }
 };
 
-template <typename T>
+template<typename T>
 struct TanExpr : UnaryExpr<T>
 {
-    TanExpr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    TanExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate(const T& wprime)
     {
         const auto aux = 1.0 / std::cos(x->val);
-        x->propagate(derivatives, wprime * aux * aux);
+        x->propagate(wprime * aux * aux);
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
         const auto aux = 1.0 / cos(x);
-        x->propagate(derivatives, wprime * aux * aux);
+        x->propagatex(wprime * aux * aux);
     }
 };
 
-template <typename T>
+template<typename T>
 struct SinhExpr : UnaryExpr<T>
 {
-    SinhExpr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    SinhExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate(const T& wprime)
     {
-        x->propagate(derivatives, wprime * std::cosh(x->val));
+        x->propagate(wprime * std::cosh(x->val));
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        x->propagate(derivatives, wprime * cosh(x));
+        x->propagatex(wprime * cosh(x));
     }
 };
 
-template <typename T>
+template<typename T>
 struct CoshExpr : UnaryExpr<T>
 {
-    CoshExpr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    CoshExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate(const T& wprime)
     {
-        x->propagate(derivatives, wprime * std::sinh(x->val));
+        x->propagate(wprime * std::sinh(x->val));
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        x->propagate(derivatives, wprime * sinh(x));
+        x->propagatex(wprime * sinh(x));
     }
 };
 
-template <typename T>
+template<typename T>
 struct TanhExpr : UnaryExpr<T>
 {
-    TanhExpr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    TanhExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate(const T& wprime)
     {
         const auto aux = 1.0 / std::cosh(x->val);
-        x->propagate(derivatives, wprime * aux * aux);
+        x->propagate(wprime * aux * aux);
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
         const auto aux = 1.0 / cosh(x);
-        x->propagate(derivatives, wprime * aux * aux);
+        x->propagatex(wprime * aux * aux);
     }
 };
 
-template <typename T>
+template<typename T>
 struct ArcSinExpr : UnaryExpr<T>
 {
-    ArcSinExpr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    ArcSinExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate(const T& wprime)
     {
-        x->propagate(derivatives, wprime / std::sqrt(1.0 - x->val * x->val));
+        x->propagate(wprime / std::sqrt(1.0 - x->val * x->val));
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        x->propagate(derivatives, wprime / sqrt(1.0 - x * x));
+        x->propagatex(wprime / sqrt(1.0 - x * x));
     }
 };
 
-template <typename T>
+template<typename T>
 struct ArcCosExpr : UnaryExpr<T>
 {
-    ArcCosExpr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    ArcCosExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate(const T& wprime)
     {
-        x->propagate(derivatives, -wprime / std::sqrt(1.0 - x->val * x->val));
+        x->propagate(-wprime / std::sqrt(1.0 - x->val * x->val));
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        x->propagate(derivatives, -wprime / sqrt(1.0 - x * x));
+        x->propagatex(-wprime / sqrt(1.0 - x * x));
     }
 };
 
-template <typename T>
+template<typename T>
 struct ArcTanExpr : UnaryExpr<T>
 {
-    ArcTanExpr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    ArcTanExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate(const T& wprime)
     {
-        x->propagate(derivatives, wprime / (1.0 + x->val * x->val));
+        x->propagate(wprime / (1.0 + x->val * x->val));
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        x->propagate(derivatives, wprime / (1.0 + x * x));
+        x->propagatex(wprime / (1.0 + x * x));
     }
 };
 
-template <typename T>
+template<typename T>
 struct ExpExpr : UnaryExpr<T>
 {
+    // Using declarations for data members of base class
     using UnaryExpr<T>::UnaryExpr;
+    using UnaryExpr<T>::val;
+    using UnaryExpr<T>::x;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    virtual void propagate(const T& wprime)
     {
-        x->propagate(derivatives, wprime * val);
+        x->propagate(wprime * val);
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        x->propagate(derivatives, wprime * exp(x));
+        x->propagatex(wprime * exp(x));
     }
 };
 
-template <typename T>
+template<typename T>
 struct LogExpr : UnaryExpr<T>
 {
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
     using UnaryExpr<T>::UnaryExpr;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    virtual void propagate(const T& wprime)
     {
-        x->propagate(derivatives, wprime / x->val);
+        x->propagate(wprime / x->val);
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        x->propagate(derivatives, wprime / x);
+        x->propagatex(wprime / x);
     }
 };
 
-template <typename T>
+template<typename T>
 struct Log10Expr : UnaryExpr<T>
 {
-    constexpr static double ln10 = 2.3025850929940456840179914546843;
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
 
-    Log10Expr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+    constexpr static auto ln10 = static_cast<VariableValueType<T>>(2.3025850929940456840179914546843);
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    Log10Expr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate(const T& wprime)
     {
-        x->propagate(derivatives, wprime / (ln10 * x->val));
+        x->propagate(wprime / (ln10 * x->val));
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        x->propagate(derivatives, wprime / (ln10 * x));
+        x->propagatex(wprime / (ln10 * x));
     }
 };
 
-template <typename T>
+template<typename T>
 struct PowExpr : BinaryExpr<T>
 {
+    // Using declarations for data members of base class
+    using BinaryExpr<T>::val;
+    using BinaryExpr<T>::l;
+    using BinaryExpr<T>::r;
+
     T log_l;
 
-    PowExpr(T val, const ExprPtr<T>& l, const ExprPtr<T>& r) : BinaryExpr<T>(val, l, r), log_l(std::log(l->val)) {}
+    PowExpr(const T& val, const ExprPtr<T>& l, const ExprPtr<T>& r) : BinaryExpr<T>(val, l, r), log_l(std::log(l->val)) {}
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    virtual void propagate(const T& wprime)
     {
         const auto lval = l->val;
         const auto rval = r->val;
         const auto aux = wprime * val;
-        l->propagate(derivatives, aux * rval / lval);
-        r->propagate(derivatives, aux * std::log(lval));
+        l->propagate(aux * rval / lval);
+        r->propagate(aux * std::log(lval));
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
         const auto aux = wprime * pow(l, r - 1.0);
-        l->propagate(derivatives, aux * r);
-        r->propagate(derivatives, aux *l * log(l));
+        l->propagatex(aux * r);
+        r->propagatex(aux * l * log(l));
     }
 };
 
-template <typename T>
+template<typename T>
 struct PowConstantLeftExpr : BinaryExpr<T>
 {
-    PowConstantLeftExpr(T val, const ExprPtr<T>& l, const ExprPtr<T>& r) : BinaryExpr<T>(val, l, r) {}
+    // Using declarations for data members of base class
+    using BinaryExpr<T>::val;
+    using BinaryExpr<T>::l;
+    using BinaryExpr<T>::r;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    PowConstantLeftExpr(const T& val, const ExprPtr<T>& l, const ExprPtr<T>& r) : BinaryExpr<T>(val, l, r) {}
+
+    virtual void propagate(const T& wprime)
     {
-        r->propagate(derivatives, wprime * val * std::log(l->val));
+        r->propagate(wprime * val * std::log(l->val));
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        r->propagate(derivatives, wprime * pow(l, r) * log(l));
+        r->propagatex(wprime * pow(l, r) * log(l));
     }
 };
 
-template <typename T>
+template<typename T>
 struct PowConstantRightExpr : BinaryExpr<T>
 {
-    PowConstantRightExpr(T val, const ExprPtr<T>& l, const ExprPtr<T>& r) : BinaryExpr<T>(val, l, r) {}
+    // Using declarations for data members of base class
+    using BinaryExpr<T>::val;
+    using BinaryExpr<T>::l;
+    using BinaryExpr<T>::r;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    PowConstantRightExpr(const T& val, const ExprPtr<T>& l, const ExprPtr<T>& r) : BinaryExpr<T>(val, l, r) {}
+
+    virtual void propagate(const T& wprime)
     {
-        l->propagate(derivatives, wprime * val * r->val / l->val);
+        l->propagate(wprime * val * r->val / l->val);
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        l->propagate(derivatives, wprime * pow(l, r - 1.0) * r);
+        l->propagatex(wprime * pow(l, r - 1) * r);
     }
 };
 
-template <typename T>
+template<typename T>
 struct SqrtExpr : UnaryExpr<T>
 {
-    SqrtExpr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    SqrtExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate(const T& wprime)
     {
-        x->propagate(derivatives, wprime / (2.0 * std::sqrt(x->val)));
+        x->propagate(wprime / (2.0 * std::sqrt(x->val)));
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        x->propagate(derivatives, wprime / (2.0 * sqrt(x)));
+        x->propagatex(wprime / (2.0 * sqrt(x)));
     }
 };
 
-template <typename T>
+template<typename T>
 struct AbsExpr : UnaryExpr<T>
 {
-    AbsExpr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
+    using U = VariableValueType<T>;
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    AbsExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate(const T& wprime)
     {
-        x->propagate(derivatives, wprime * std::copysign(1.0, x->val));
+        if(x->val < 0.0) x->propagate(-wprime);
+        else x->propagate(wprime);
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        x->propagate(derivatives, wprime * std::copysign(1.0, x->val));
+        if(x->val < 0.0) x->propagatex(-wprime);
+        else x->propagatex(wprime);
     }
 };
 
-template <typename T>
+template<typename T>
 struct ErfExpr : UnaryExpr<T>
 {
-    constexpr static auto sqrt_pi = 1.7724538509055160272981674833411451872554456638435;
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
 
-    ErfExpr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+    constexpr static auto sqrt_pi = static_cast<VariableValueType<T>>(1.7724538509055160272981674833411451872554456638435);
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    ErfExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate(const T& wprime)
     {
         const auto aux = 2.0/sqrt_pi * std::exp(-(x->val)*(x->val));
-        x->propagate(derivatives, wprime * aux);
+        x->propagate(wprime * aux);
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
         const auto aux = 2.0/sqrt_pi * exp(-x*x);
-        x->propagate(derivatives, wprime * aux);
+        x->propagatex(wprime * aux);
     }
 };
 
 template <typename T>
 struct SigmoidExpr : UnaryExpr<T>
 {
-    SigmoidExpr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
+    
+    SigmoidExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    virtual void propagate(const T& wprime)
     {
-        x->propagate(derivatives, wprime / (std::exp(x->val) + std::exp(-x->val) + T(2.0)));
+        x->propagate(wprime / (std::exp(x->val) + std::exp(-x->val) + T(2.0)));
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        x->propagate(derivatives, wprime / (exp(x) + exp(-x) + T(2.0)));
+        x->propagatex(wprime / (exp(x) + exp(-x) + T(2.0)));
     }
 };
 
 template <typename T>
 struct ReLUExpr : UnaryExpr<T>
 {
-    ReLUExpr(T val, const ExprPtr<T>& x) : UnaryExpr(val, x) {}
+    // Using declarations for data members of base class
+    using UnaryExpr<T>::x;
+    
+    ReLUExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
 
-    virtual void propagate(DerivativesMap<T>& derivatives, T wprime) const
+    virtual void propagate(const T& wprime)
     {
         const auto aux = x->val >= 0.0 ? T(1.0) : T(0.0);
-        x->propagate(derivatives, wprime * aux);
+        x->propagate(wprime * aux);
     }
 
-    virtual void propagate(DerivativesMapX<T>& derivatives, const ExprPtr<T>& wprime) const
+    virtual void propagatex(const ExprPtr<T>& wprime)
     {
         const auto aux = x->val >= 0.0 ? T(1.0) : T(0.0);
-        x->propagate(derivatives, wprime * aux);
+        x->propagatex(wprime * aux);
     }
 };
 
 //------------------------------------------------------------------------------
 // CONVENIENT FUNCTIONS
 //------------------------------------------------------------------------------
-template <typename T>
-inline ExprPtr<T> constant(T val) { return std::make_shared<ConstantExpr<T>>(val); }
+template<typename T> ExprPtr<T> constant(const T& val) { return std::make_shared<ConstantExpr<T>>(val); }
 
 //------------------------------------------------------------------------------
 // ARITHMETIC OPERATORS
 //------------------------------------------------------------------------------
-template <typename T>
-inline ExprPtr<T> operator+(const ExprPtr<T>& r) { return r; }
-template <typename T>
-inline ExprPtr<T> operator-(const ExprPtr<T>& r) { return std::make_shared<NegativeExpr<T>>(-r->val, r); }
+template<typename T> ExprPtr<T> operator+(const ExprPtr<T>& r) { return r; }
+template<typename T> ExprPtr<T> operator-(const ExprPtr<T>& r) { return std::make_shared<NegativeExpr<T>>(-r->val, r); }
 
-template <typename T>
-inline ExprPtr<T> operator+(const ExprPtr<T>& l, const ExprPtr<T>& r) { return std::make_shared<AddExpr<T>>(l->val + r->val, l, r); }
-template <typename T>
-inline ExprPtr<T> operator-(const ExprPtr<T>& l, const ExprPtr<T>& r) { return std::make_shared<SubExpr<T>>(l->val - r->val, l, r); }
-template <typename T>
-inline ExprPtr<T> operator*(const ExprPtr<T>& l, const ExprPtr<T>& r) { return std::make_shared<MulExpr<T>>(l->val * r->val, l, r); }
-template <typename T>
-inline ExprPtr<T> operator/(const ExprPtr<T>& l, const ExprPtr<T>& r) { return std::make_shared<DivExpr<T>>(l->val / r->val, l, r); }
+template<typename T> ExprPtr<T> operator+(const ExprPtr<T>& l, const ExprPtr<T>& r) { return std::make_shared<AddExpr<T>>(l->val + r->val, l, r); }
+template<typename T> ExprPtr<T> operator-(const ExprPtr<T>& l, const ExprPtr<T>& r) { return std::make_shared<SubExpr<T>>(l->val - r->val, l, r); }
+template<typename T> ExprPtr<T> operator*(const ExprPtr<T>& l, const ExprPtr<T>& r) { return std::make_shared<MulExpr<T>>(l->val * r->val, l, r); }
+template<typename T> ExprPtr<T> operator/(const ExprPtr<T>& l, const ExprPtr<T>& r) { return std::make_shared<DivExpr<T>>(l->val / r->val, l, r); }
 
-template <typename T>
-inline ExprPtr<T> operator+(T l, const ExprPtr<T>& r) { return constant(l) + r; }
-template <typename T>
-inline ExprPtr<T> operator-(T l, const ExprPtr<T>& r) { return constant(l) - r; }
-template <typename T>
-inline ExprPtr<T> operator*(T l, const ExprPtr<T>& r) { return constant(l) * r; }
-template <typename T>
-inline ExprPtr<T> operator/(T l, const ExprPtr<T>& r) { return constant(l) / r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator+(const U& l, const ExprPtr<T>& r) { return constant<T>(l) + r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator-(const U& l, const ExprPtr<T>& r) { return constant<T>(l) - r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator*(const U& l, const ExprPtr<T>& r) { return constant<T>(l) * r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator/(const U& l, const ExprPtr<T>& r) { return constant<T>(l) / r; }
 
-template <typename T>
-inline ExprPtr<T> operator+(const ExprPtr<T>& l, T r) { return l + constant(r); }
-template <typename T>
-inline ExprPtr<T> operator-(const ExprPtr<T>& l, T r) { return l - constant(r); }
-template <typename T>
-inline ExprPtr<T> operator*(const ExprPtr<T>& l, T r) { return l * constant(r); }
-template <typename T>
-inline ExprPtr<T> operator/(const ExprPtr<T>& l, T r) { return l / constant(r); }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator+(const ExprPtr<T>& l, const U& r) { return l + constant<T>(r); }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator-(const ExprPtr<T>& l, const U& r) { return l - constant<T>(r); }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator*(const ExprPtr<T>& l, const U& r) { return l * constant<T>(r); }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator/(const ExprPtr<T>& l, const U& r) { return l / constant<T>(r); }
+
 
 //------------------------------------------------------------------------------
 // TRIGONOMETRIC FUNCTIONS
 //------------------------------------------------------------------------------
-template <typename T>
-inline ExprPtr<T> sin(const ExprPtr<T>& x) { return std::make_shared<SinExpr<T>>(std::sin(x->val), x); }
-template <typename T>
-inline ExprPtr<T> cos(const ExprPtr<T>& x) { return std::make_shared<CosExpr<T>>(std::cos(x->val), x); }
-template <typename T>
-inline ExprPtr<T> tan(const ExprPtr<T>& x) { return std::make_shared<TanExpr<T>>(std::tan(x->val), x); }
-template <typename T>
-inline ExprPtr<T> asin(const ExprPtr<T>& x) { return std::make_shared<ArcSinExpr<T>>(std::asin(x->val), x); }
-template <typename T>
-inline ExprPtr<T> acos(const ExprPtr<T>& x) { return std::make_shared<ArcCosExpr<T>>(std::acos(x->val), x); }
-template <typename T>
-inline ExprPtr<T> atan(const ExprPtr<T>& x) { return std::make_shared<ArcTanExpr<T>>(std::atan(x->val), x); }
+template<typename T> ExprPtr<T> sin(const ExprPtr<T>& x) { return std::make_shared<SinExpr<T>>(std::sin(x->val), x); }
+template<typename T> ExprPtr<T> cos(const ExprPtr<T>& x) { return std::make_shared<CosExpr<T>>(std::cos(x->val), x); }
+template<typename T> ExprPtr<T> tan(const ExprPtr<T>& x) { return std::make_shared<TanExpr<T>>(std::tan(x->val), x); }
+template<typename T> ExprPtr<T> asin(const ExprPtr<T>& x) { return std::make_shared<ArcSinExpr<T>>(std::asin(x->val), x); }
+template<typename T> ExprPtr<T> acos(const ExprPtr<T>& x) { return std::make_shared<ArcCosExpr<T>>(std::acos(x->val), x); }
+template<typename T> ExprPtr<T> atan(const ExprPtr<T>& x) { return std::make_shared<ArcTanExpr<T>>(std::atan(x->val), x); }
+
 
 //------------------------------------------------------------------------------
 // HYPERBOLIC FUNCTIONS
 //------------------------------------------------------------------------------
-template <typename T>
-inline ExprPtr<T> sinh(const ExprPtr<T>& x) { return std::make_shared<SinhExpr<T>>(std::sinh(x->val), x); }
-template <typename T>
-inline ExprPtr<T> cosh(const ExprPtr<T>& x) { return std::make_shared<CoshExpr<T>>(std::cosh(x->val), x); }
-template <typename T>
-inline ExprPtr<T> tanh(const ExprPtr<T>& x) { return std::make_shared<TanhExpr<T>>(std::tanh(x->val), x); }
+template<typename T> ExprPtr<T> sinh(const ExprPtr<T>& x) { return std::make_shared<SinhExpr<T>>(std::sinh(x->val), x); }
+template<typename T> ExprPtr<T> cosh(const ExprPtr<T>& x) { return std::make_shared<CoshExpr<T>>(std::cosh(x->val), x); }
+template<typename T> ExprPtr<T> tanh(const ExprPtr<T>& x) { return std::make_shared<TanhExpr<T>>(std::tanh(x->val), x); }
+
 
 //------------------------------------------------------------------------------
 // EXPONENTIAL AND LOGARITHMIC FUNCTIONS
 //------------------------------------------------------------------------------
-template <typename T>
-inline ExprPtr<T> exp(const ExprPtr<T>& x) { return std::make_shared<ExpExpr<T>>(std::exp(x->val), x); }
-template <typename T>
-inline ExprPtr<T> log(const ExprPtr<T>& x) { return std::make_shared<LogExpr<T>>(std::log(x->val), x); }
-template <typename T>
-inline ExprPtr<T> log10(const ExprPtr<T>& x) { return std::make_shared<Log10Expr<T>>(std::log10(x->val), x); }
+template<typename T> ExprPtr<T> exp(const ExprPtr<T>& x) { return std::make_shared<ExpExpr<T>>(std::exp(x->val), x); }
+template<typename T> ExprPtr<T> log(const ExprPtr<T>& x) { return std::make_shared<LogExpr<T>>(std::log(x->val), x); }
+template<typename T> ExprPtr<T> log10(const ExprPtr<T>& x) { return std::make_shared<Log10Expr<T>>(std::log10(x->val), x); }
+
 
 //------------------------------------------------------------------------------
 // POWER FUNCTIONS
 //------------------------------------------------------------------------------
-template <typename T>
-inline ExprPtr<T> pow(const ExprPtr<T>& l, const ExprPtr<T>& r) { return std::make_shared<PowExpr<T>>(std::pow(l->val, r->val), l, r); }
-template <typename T>
-inline ExprPtr<T> pow(T l, const ExprPtr<T>& r) { return std::make_shared<PowConstantLeftExpr<T>>(std::pow(l, r->val), constant(l), r); }
-template <typename T>
-inline ExprPtr<T> pow(const ExprPtr<T>& l, T r) { return std::make_shared<PowConstantRightExpr<T>>(std::pow(l->val, r), l, constant(r)); }
-template <typename T>
-inline ExprPtr<T> sqrt(const ExprPtr<T>& x) { return std::make_shared<SqrtExpr<T>>(std::sqrt(x->val), x); }
+template<typename T> ExprPtr<T> sqrt(const ExprPtr<T>& x) { return std::make_shared<SqrtExpr<T>>(std::sqrt(x->val), x); }
+template<typename T> ExprPtr<T> pow(const ExprPtr<T>& l, const ExprPtr<T>& r) { return std::make_shared<PowExpr<T>>(std::pow(l->val, r->val), l, r); }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> pow(const U& l, const ExprPtr<T>& r) { return std::make_shared<PowConstantLeftExpr<T>>(std::pow(l, r->val), constant<T>(l), r); }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> pow(const ExprPtr<T>& l, const U& r) { return std::make_shared<PowConstantRightExpr<T>>(std::pow(l->val, r), l, constant<T>(r)); }
+
 
 //------------------------------------------------------------------------------
 // OTHER FUNCTIONS
 //------------------------------------------------------------------------------
-template <typename T>
-inline ExprPtr<T> abs(const ExprPtr<T>& x) { return std::make_shared<AbsExpr<T>>(std::abs(x->val), x); }
-template <typename T>
-inline ExprPtr<T> abs2(const ExprPtr<T>& x) { return x * x; }
-template <typename T>
-inline ExprPtr<T> conj(const ExprPtr<T>& x) { return x; }
-template <typename T>
-inline ExprPtr<T> real(const ExprPtr<T>& x) { return x; }
-template <typename T>
-inline ExprPtr<T> imag(const ExprPtr<T>& x) { return constant(0.0); }
-template <typename T>
-inline ExprPtr<T> erf(const ExprPtr<T>& x) { return std::make_shared<ErfExpr<T>>(std::erf(x->val), x); }
+template<typename T> ExprPtr<T> abs(const ExprPtr<T>& x) { return std::make_shared<AbsExpr<T>>(std::abs(x->val), x); }
+template<typename T> ExprPtr<T> abs2(const ExprPtr<T>& x) { return x * x; }
+template<typename T> ExprPtr<T> conj(const ExprPtr<T>& x) { return x; }
+template<typename T> ExprPtr<T> real(const ExprPtr<T>& x) { return x; }
+template<typename T> ExprPtr<T> imag(const ExprPtr<T>& x) { return constant<T>(0.0); }
+template<typename T> ExprPtr<T> erf(const ExprPtr<T>& x) { return std::make_shared<ErfExpr<T>>(std::erf(x->val), x); }
+
 
 //------------------------------------------------------------------------------
 // ACTIVATION FUNCTIONS
 //------------------------------------------------------------------------------
-template <typename T>
-inline ExprPtr<T> sigmoid(const ExprPtr<T>& x) { return std::make_shared<SigmoidExpr<T>>(T(1.0) / (T(1.0) + std::exp(-x->val)), x); }
-template <typename T>
-inline ExprPtr<T> relu(const ExprPtr<T>& x) { return std::make_shared<ReLUExpr<T>>(x->val >= T(0.0) ? x->val : T(0.0), x); }
+template <typename T> ExprPtr<T> sigmoid(const ExprPtr<T>& x) { return std::make_shared<SigmoidExpr<T>>(T(1.0) / (T(1.0) + std::exp(-x->val)), x); }
+template <typename T> ExprPtr<T> relu(const ExprPtr<T>& x) { return std::make_shared<ReLUExpr<T>>(x->val >= T(0.0) ? x->val : T(0.0), x); }
 
 //------------------------------------------------------------------------------
 // COMPARISON OPERATORS
 //------------------------------------------------------------------------------
-template <typename T>
-inline bool operator==(const ExprPtr<T>& l, const ExprPtr<T>& r) { return l->val == r->val; }
-template <typename T>
-inline bool operator!=(const ExprPtr<T>& l, const ExprPtr<T>& r) { return l->val != r->val; }
-template <typename T>
-inline bool operator<=(const ExprPtr<T>& l, const ExprPtr<T>& r) { return l->val <= r->val; }
-template <typename T>
-inline bool operator>=(const ExprPtr<T>& l, const ExprPtr<T>& r) { return l->val >= r->val; }
-template <typename T>
-inline bool operator<(const ExprPtr<T>& l, const ExprPtr<T>& r) { return l->val < r->val; }
-template <typename T>
-inline bool operator>(const ExprPtr<T>& l, const ExprPtr<T>& r) { return l->val > r->val; }
+template<typename T> bool operator==(const ExprPtr<T>& l, const ExprPtr<T>& r) { return l->val == r->val; }
+template<typename T> bool operator!=(const ExprPtr<T>& l, const ExprPtr<T>& r) { return l->val != r->val; }
+template<typename T> bool operator<=(const ExprPtr<T>& l, const ExprPtr<T>& r) { return l->val <= r->val; }
+template<typename T> bool operator>=(const ExprPtr<T>& l, const ExprPtr<T>& r) { return l->val >= r->val; }
+template<typename T> bool operator<(const ExprPtr<T>& l, const ExprPtr<T>& r) { return l->val < r->val; }
+template<typename T> bool operator>(const ExprPtr<T>& l, const ExprPtr<T>& r) { return l->val > r->val; }
 
-template <typename T>
-inline bool operator==(T l, const ExprPtr<T>& r) { return l == r->val; }
-template <typename T>
-inline bool operator!=(T l, const ExprPtr<T>& r) { return l != r->val; }
-template <typename T>
-inline bool operator<=(T l, const ExprPtr<T>& r) { return l <= r->val; }
-template <typename T>
-inline bool operator>=(T l, const ExprPtr<T>& r) { return l >= r->val; }
-template <typename T>
-inline bool operator<(T l, const ExprPtr<T>& r) { return l < r->val; }
-template <typename T>
-inline bool operator>(T l, const ExprPtr<T>& r) { return l > r->val; }
 
-template <typename T>
-inline bool operator==(const ExprPtr<T>& l, T r) { return l->val == r; }
-template <typename T>
-inline bool operator!=(const ExprPtr<T>& l, T r) { return l->val != r; }
-template <typename T>
-inline bool operator<=(const ExprPtr<T>& l, T r) { return l->val <= r; }
-template <typename T>
-inline bool operator>=(const ExprPtr<T>& l, T r) { return l->val >= r; }
-template <typename T>
-inline bool operator<(const ExprPtr<T>& l, T r) { return l->val < r; }
-template <typename T>
-inline bool operator>(const ExprPtr<T>& l, T r) { return l->val > r; }
 
-} // namespace reverse
 
-using namespace reverse;
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator==(const U& l, const ExprPtr<T>& r) { return l == r->val; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator!=(const U& l, const ExprPtr<T>& r) { return l != r->val; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator<=(const U& l, const ExprPtr<T>& r) { return l <= r->val; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator>=(const U& l, const ExprPtr<T>& r) { return l >= r->val; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator<(const U& l, const ExprPtr<T>& r) { return l < r->val; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator>(const U& l, const ExprPtr<T>& r) { return l > r->val; }
 
-/// The autodiff variable type used for automatic differentiation.
-template <typename T>
-struct var
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator==(const ExprPtr<T>& l, const U& r) { return l->val == r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator!=(const ExprPtr<T>& l, const U& r) { return l->val != r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator<=(const ExprPtr<T>& l, const U& r) { return l->val <= r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator>=(const ExprPtr<T>& l, const U& r) { return l->val >= r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator<(const ExprPtr<T>& l, const U& r) { return l->val < r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator>(const ExprPtr<T>& l, const U& r) { return l->val > r; }
+
+/// The autodiff variable type used for reverse mode automatic differentiation.
+template<typename T>
+struct Variable
 {
     /// The pointer to the expression tree of variable operations
     ExprPtr<T> expr;
 
-    /// Construct a default var object variable
-    var() : var(T(0.0)) {}
+    /// Construct a default Variable object
+    Variable() : Variable(T(0.0)) {}
 
-    /// Construct a var object variable with given value
-    var(T val) : expr(std::make_shared<ParameterExpr<T>>(val)) {}
+    /// Construct a copy of a Variable object
+    Variable(const Variable& other) : Variable(other.expr) {}
 
     /// Construct a var object variable with given int
-    var(typename std::enable_if_t<!std::is_same_v<T,int>, int> val) : expr(std::make_shared<ParameterExpr<T>>(static_cast<T>(val))) { }
+    // XXX verify
+    //var(typename std::enable_if_t<!std::is_same_v<T,int>, int> val) : expr(std::make_shared<ParameterExpr<T>>(static_cast<T>(val))) { }
 
-    /// Construct a var object variable with given expression
-    var(const ExprPtr<T>& expr) : expr(std::make_shared<VariableExpr<T>>(expr)) {}
+    /// Construct a Variable object with given arithmetic value
+    template<typename U, EnableIf<isArithmetic<U>>...>
+    Variable(const U& val) : expr(std::make_shared<IndependentVariableExpr<T>>(val)) {}
 
-    /// Implicitly convert this var object variable into an expression pointer
+    /// Construct a Variable object with given expression
+    Variable(const ExprPtr<T>& expr) : expr(std::make_shared<DependentVariableExpr<T>>(expr)) {}
+
+    /// Return a pointer to the underlying VariableExpr object in this variable.
+    auto __variableExpr() const { return static_cast<VariableExpr<T>*>(expr.get()); }
+
+    /// Return the derivative value stored in this variable.
+    auto grad() const { return __variableExpr()->grad; }
+
+    /// Return the derivative expression stored in this variable.
+    auto gradx() const { return __variableExpr()->gradx; }
+
+    /// Reeet the derivative value stored in this variable to zero.
+    auto seed() { __variableExpr()->grad = 0; }
+
+    /// Reeet the derivative expression stored in this variable to zero expression.
+    auto seedx() { __variableExpr()->gradx = constant<T>(0); }
+
+    /// Implicitly convert this Variable object into an expression pointer.
     operator ExprPtr<T>() const { return expr; }
 
-    /// Explicitly convert this var object variable into a T value
+    /// Explicitly convert this Variable object into its underlying arithmetic type.
     explicit operator T() const { return expr->val; }
 
-	// Arithmetic-assignment operators
-    var& operator+=(const ExprPtr<T>& other) { expr = expr + other; return *this; }
-    var& operator-=(const ExprPtr<T>& other) { expr = expr - other; return *this; }
-    var& operator*=(const ExprPtr<T>& other) { expr = expr * other; return *this; }
-    var& operator/=(const ExprPtr<T>& other) { expr = expr / other; return *this; }
-    var& operator+=(T other) { expr = expr + constant(other); return *this; }
-    var& operator-=(T other) { expr = expr - constant(other); return *this; }
-    var& operator*=(T other) { expr = expr * constant(other); return *this; }
-    var& operator/=(T other) { expr = expr / constant(other); return *this; }
+    /// Assign an arithmetic value to this variable.
+    template<typename U, EnableIf<isArithmetic<U>>...>
+    auto operator=(const U& val) -> Variable& { *this = Variable(val); return *this; }
+
+    /// Assign an expression to this variable.
+    auto operator=(const ExprPtr<T>& x) -> Variable& { *this = Variable(x); return *this; }
+
+	// Assignment operators
+    Variable& operator+=(const ExprPtr<T>& x) { *this = Variable(expr + x); return *this; }
+    Variable& operator-=(const ExprPtr<T>& x) { *this = Variable(expr - x); return *this; }
+    Variable& operator*=(const ExprPtr<T>& x) { *this = Variable(expr * x); return *this; }
+    Variable& operator/=(const ExprPtr<T>& x) { *this = Variable(expr / x); return *this; }
+
+	// Assignment operators with arithmetic values
+    template<typename U, EnableIf<isArithmetic<U>>...> Variable& operator+=(const U& x) { *this = Variable(expr + x); return *this; }
+    template<typename U, EnableIf<isArithmetic<U>>...> Variable& operator-=(const U& x) { *this = Variable(expr - x); return *this; }
+    template<typename U, EnableIf<isArithmetic<U>>...> Variable& operator*=(const U& x) { *this = Variable(expr * x); return *this; }
+    template<typename U, EnableIf<isArithmetic<U>>...> Variable& operator/=(const U& x) { *this = Variable(expr / x); return *this; }
 };
 
 //------------------------------------------------------------------------------
-// COMPARISON OPERATORS (DEFINED FOR ARGUMENTS OF TYPE var)
+// COMPARISON OPERATORS (DEFINED FOR ARGUMENTS OF TYPE Variable)
 //------------------------------------------------------------------------------
-template <typename T>
-inline bool operator==(const var<T>& l, const var<T>& r) { return l.expr == r.expr; }
-template <typename T>
-inline bool operator!=(const var<T>& l, const var<T>& r) { return l.expr != r.expr; }
-template <typename T>
-inline bool operator<=(const var<T>& l, const var<T>& r) { return l.expr <= r.expr; }
-template <typename T>
-inline bool operator>=(const var<T>& l, const var<T>& r) { return l.expr >= r.expr; }
-template <typename T>
-inline bool operator<(const var<T>& l, const var<T>& r) { return l.expr < r.expr; }
-template <typename T>
-inline bool operator>(const var<T>& l, const var<T>& r) { return l.expr > r.expr; }
+template<typename T> bool operator==(const Variable<T>& l, const Variable<T>& r) { return l.expr == r.expr; }
+template<typename T> bool operator!=(const Variable<T>& l, const Variable<T>& r) { return l.expr != r.expr; }
+template<typename T> bool operator<=(const Variable<T>& l, const Variable<T>& r) { return l.expr <= r.expr; }
+template<typename T> bool operator>=(const Variable<T>& l, const Variable<T>& r) { return l.expr >= r.expr; }
+template<typename T> bool operator<(const Variable<T>& l, const Variable<T>& r) { return l.expr < r.expr; }
+template<typename T> bool operator>(const Variable<T>& l, const Variable<T>& r) { return l.expr > r.expr; }
 
-template <typename T>
-inline bool operator==(T l, const var<T>& r) { return l == r.expr; }
-template <typename T>
-inline bool operator!=(T l, const var<T>& r) { return l != r.expr; }
-template <typename T>
-inline bool operator<=(T l, const var<T>& r) { return l <= r.expr; }
-template <typename T>
-inline bool operator>=(T l, const var<T>& r) { return l >= r.expr; }
-template <typename T>
-inline bool operator<(T l, const var<T>& r) { return l < r.expr; }
-template <typename T>
-inline bool operator>(T l, const var<T>& r) { return l > r.expr; }
 
-template <typename T>
-inline bool operator==(const var<T>& l, T r) { return l.expr == r; }
-template <typename T>
-inline bool operator!=(const var<T>& l, T r) { return l.expr != r; }
-template <typename T>
-inline bool operator<=(const var<T>& l, T r) { return l.expr <= r; }
-template <typename T>
-inline bool operator>=(const var<T>& l, T r) { return l.expr >= r; }
-template <typename T>
-inline bool operator<(const var<T>& l, T r) { return l.expr < r; }
-template <typename T>
-inline bool operator>(const var<T>& l, T r) { return l.expr > r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator==(const U& l, const Variable<T>& r) { return l == r.expr; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator!=(const U& l, const Variable<T>& r) { return l != r.expr; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator<=(const U& l, const Variable<T>& r) { return l <= r.expr; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator>=(const U& l, const Variable<T>& r) { return l >= r.expr; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator<(const U& l, const Variable<T>& r) { return l < r.expr; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator>(const U& l, const Variable<T>& r) { return l > r.expr; }
+
+
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator==(const Variable<T>& l, const U& r) { return l.expr == r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator!=(const Variable<T>& l, const U& r) { return l.expr != r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator<=(const Variable<T>& l, const U& r) { return l.expr <= r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator>=(const Variable<T>& l, const U& r) { return l.expr >= r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator<(const Variable<T>& l, const U& r) { return l.expr < r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> bool operator>(const Variable<T>& l, const U& r) { return l.expr > r; }
+
 
 //------------------------------------------------------------------------------
-// ARITHMETIC OPERATORS (DEFINED FOR ARGUMENTS OF TYPE var<T>)
+// ARITHMETIC OPERATORS (DEFINED FOR ARGUMENTS OF TYPE Variable)
 //------------------------------------------------------------------------------
-template <typename T>
-inline const ExprPtr<T>& operator+(const var<T>& r) { return r.expr; }
-template <typename T>
-inline ExprPtr<T> operator-(const var<T>& r) { return -r.expr; }
+template<typename T> const ExprPtr<T>& operator+(const Variable<T>& r) { return r.expr; }
+template<typename T> ExprPtr<T> operator-(const Variable<T>& r) { return -r.expr; }
 
-template <typename T>
-inline ExprPtr<T> operator+(const var<T>& l, const var<T>& r) { return l.expr + r.expr; }
-template <typename T>
-inline ExprPtr<T> operator-(const var<T>& l, const var<T>& r) { return l.expr - r.expr; }
-template <typename T>
-inline ExprPtr<T> operator*(const var<T>& l, const var<T>& r) { return l.expr * r.expr; }
-template <typename T>
-inline ExprPtr<T> operator/(const var<T>& l, const var<T>& r) { return l.expr / r.expr; }
 
-template <typename T>
-inline ExprPtr<T> operator+(const ExprPtr<T>& l, const var<T>& r) { return l + r.expr; }
-template <typename T>
-inline ExprPtr<T> operator-(const ExprPtr<T>& l, const var<T>& r) { return l - r.expr; }
-template <typename T>
-inline ExprPtr<T> operator*(const ExprPtr<T>& l, const var<T>& r) { return l * r.expr; }
-template <typename T>
-inline ExprPtr<T> operator/(const ExprPtr<T>& l, const var<T>& r) { return l / r.expr; }
+template<typename T> ExprPtr<T> operator+(const Variable<T>& l, const Variable<T>& r) { return l.expr + r.expr; }
+template<typename T> ExprPtr<T> operator-(const Variable<T>& l, const Variable<T>& r) { return l.expr - r.expr; }
+template<typename T> ExprPtr<T> operator*(const Variable<T>& l, const Variable<T>& r) { return l.expr * r.expr; }
+template<typename T> ExprPtr<T> operator/(const Variable<T>& l, const Variable<T>& r) { return l.expr / r.expr; }
 
-template <typename T>
-inline ExprPtr<T> operator+(const var<T>& l, const ExprPtr<T>& r) { return l.expr + r; }
-template <typename T>
-inline ExprPtr<T> operator-(const var<T>& l, const ExprPtr<T>& r) { return l.expr - r; }
-template <typename T>
-inline ExprPtr<T> operator*(const var<T>& l, const ExprPtr<T>& r) { return l.expr * r; }
-template <typename T>
-inline ExprPtr<T> operator/(const var<T>& l, const ExprPtr<T>& r) { return l.expr / r; }
 
-template <typename T>
-inline ExprPtr<T> operator+(T l, const var<T>& r) { return l + r.expr; }
-template <typename T>
-inline ExprPtr<T> operator-(T l, const var<T>& r) { return l - r.expr; }
-template <typename T>
-inline ExprPtr<T> operator*(T l, const var<T>& r) { return l * r.expr; }
-template <typename T>
-inline ExprPtr<T> operator/(T l, const var<T>& r) { return l / r.expr; }
+template<typename T> ExprPtr<T> operator+(const ExprPtr<T>& l, const Variable<T>& r) { return l + r.expr; }
+template<typename T> ExprPtr<T> operator-(const ExprPtr<T>& l, const Variable<T>& r) { return l - r.expr; }
+template<typename T> ExprPtr<T> operator*(const ExprPtr<T>& l, const Variable<T>& r) { return l * r.expr; }
+template<typename T> ExprPtr<T> operator/(const ExprPtr<T>& l, const Variable<T>& r) { return l / r.expr; }
 
-template <typename T>
-inline ExprPtr<T> operator+(const var<T>& l, T r) { return l.expr + r; }
-template <typename T>
-inline ExprPtr<T> operator-(const var<T>& l, T r) { return l.expr - r; }
-template <typename T>
-inline ExprPtr<T> operator*(const var<T>& l, T r) { return l.expr * r; }
-template <typename T>
-inline ExprPtr<T> operator/(const var<T>& l, T r) { return l.expr / r; }
+
+template<typename T> ExprPtr<T> operator+(const Variable<T>& l, const ExprPtr<T>& r) { return l.expr + r; }
+template<typename T> ExprPtr<T> operator-(const Variable<T>& l, const ExprPtr<T>& r) { return l.expr - r; }
+template<typename T> ExprPtr<T> operator*(const Variable<T>& l, const ExprPtr<T>& r) { return l.expr * r; }
+template<typename T> ExprPtr<T> operator/(const Variable<T>& l, const ExprPtr<T>& r) { return l.expr / r; }
+
+
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator+(const U& l, const Variable<T>& r) { return l + r.expr; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator-(const U& l, const Variable<T>& r) { return l - r.expr; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator*(const U& l, const Variable<T>& r) { return l * r.expr; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator/(const U& l, const Variable<T>& r) { return l / r.expr; }
+
+
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator+(const Variable<T>& l, const U& r) { return l.expr + r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator-(const Variable<T>& l, const U& r) { return l.expr - r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator*(const Variable<T>& l, const U& r) { return l.expr * r; }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> operator/(const Variable<T>& l, const U& r) { return l.expr / r; }
+
 
 //------------------------------------------------------------------------------
-// TRIGONOMETRIC FUNCTIONS (DEFINED FOR ARGUMENTS OF TYPE var<T>)
+// TRIGONOMETRIC FUNCTIONS (DEFINED FOR ARGUMENTS OF TYPE Variable)
 //------------------------------------------------------------------------------
-template <typename T>
-inline ExprPtr<T> sin(const var<T>& x) { return sin(x.expr); }
-template <typename T>
-inline ExprPtr<T> cos(const var<T>& x) { return cos(x.expr); }
-template <typename T>
-inline ExprPtr<T> tan(const var<T>& x) { return tan(x.expr); }
-template <typename T>
-inline ExprPtr<T> asin(const var<T>& x) { return asin(x.expr); }
-template <typename T>
-inline ExprPtr<T> acos(const var<T>& x) { return acos(x.expr); }
-template <typename T>
-inline ExprPtr<T> atan(const var<T>& x) { return atan(x.expr); }
+template<typename T> ExprPtr<T> sin(const Variable<T>& x) { return sin(x.expr); }
+template<typename T> ExprPtr<T> cos(const Variable<T>& x) { return cos(x.expr); }
+template<typename T> ExprPtr<T> tan(const Variable<T>& x) { return tan(x.expr); }
+template<typename T> ExprPtr<T> asin(const Variable<T>& x) { return asin(x.expr); }
+template<typename T> ExprPtr<T> acos(const Variable<T>& x) { return acos(x.expr); }
+template<typename T> ExprPtr<T> atan(const Variable<T>& x) { return atan(x.expr); }
+
 
 //------------------------------------------------------------------------------
-// HYPERBOLIC FUNCTIONS (DEFINED FOR ARGUMENTS OF TYPE var<T>)
+// HYPERBOLIC FUNCTIONS (DEFINED FOR ARGUMENTS OF TYPE Variable)
 //------------------------------------------------------------------------------
-template <typename T>
-inline ExprPtr<T> sinh(const var<T>& x) { return sinh(x.expr); }
-template <typename T>
-inline ExprPtr<T> cosh(const var<T>& x) { return cosh(x.expr); }
-template <typename T>
-inline ExprPtr<T> tanh(const var<T>& x) { return tanh(x.expr); }
+template<typename T> ExprPtr<T> sinh(const Variable<T>& x) { return sinh(x.expr); }
+template<typename T> ExprPtr<T> cosh(const Variable<T>& x) { return cosh(x.expr); }
+template<typename T> ExprPtr<T> tanh(const Variable<T>& x) { return tanh(x.expr); }
+
 
 //------------------------------------------------------------------------------
-// EXPONENTIAL AND LOGARITHMIC FUNCTIONS (DEFINED FOR ARGUMENTS OF TYPE var<T>)
+// EXPONENTIAL AND LOGARITHMIC FUNCTIONS (DEFINED FOR ARGUMENTS OF TYPE Variable)
 //------------------------------------------------------------------------------
-template <typename T>
-inline ExprPtr<T> exp(const var<T>& x) { return exp(x.expr); }
-template <typename T>
-inline ExprPtr<T> log(const var<T>& x) { return log(x.expr); }
-template <typename T>
-inline ExprPtr<T> log10(const var<T>& x) { return log10(x.expr); }
+template<typename T> ExprPtr<T> exp(const Variable<T>& x) { return exp(x.expr); }
+template<typename T> ExprPtr<T> log(const Variable<T>& x) { return log(x.expr); }
+template<typename T> ExprPtr<T> log10(const Variable<T>& x) { return log10(x.expr); }
+
 
 //------------------------------------------------------------------------------
-// POWER FUNCTIONS (DEFINED FOR ARGUMENTS OF TYPE var<T>)
+// POWER FUNCTIONS (DEFINED FOR ARGUMENTS OF TYPE Variable)
 //------------------------------------------------------------------------------
-template <typename T>
-inline ExprPtr<T> pow(const var<T>& l, const var<T>& r) { return pow(l.expr, r.expr); }
-template <typename T>
-inline ExprPtr<T> pow(T l, const var<T>& r) { return pow(l, r.expr); }
-template <typename T>
-inline ExprPtr<T> pow(const var<T>& l, T r) { return pow(l.expr, r); }
-template <typename T>
-inline ExprPtr<T> sqrt(const var<T>& x) { return sqrt(x.expr); }
+template<typename T> ExprPtr<T> sqrt(const Variable<T>& x) { return sqrt(x.expr); }
+template<typename T> ExprPtr<T> pow(const Variable<T>& l, const Variable<T>& r) { return pow(l.expr, r.expr); }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> pow(const U& l, const Variable<T>& r) { return pow(l, r.expr); }
+template<typename T, typename U, EnableIf<isArithmetic<U>>...> ExprPtr<T> pow(const Variable<T>& l, const U& r) { return pow(l.expr, r); }
+
 
 //------------------------------------------------------------------------------
-// OTHER FUNCTIONS (DEFINED FOR ARGUMENTS OF TYPE var<T>)
+// OTHER FUNCTIONS (DEFINED FOR ARGUMENTS OF TYPE Variable)
 //------------------------------------------------------------------------------
-template <typename T>
-inline ExprPtr<T> abs(const var<T>& x) { return abs(x.expr); }
-template <typename T>
-inline ExprPtr<T> abs2(const var<T>& x) { return abs2(x.expr); }
-template <typename T>
-inline ExprPtr<T> conj(const var<T>& x) { return conj(x.expr); }
-template <typename T>
-inline ExprPtr<T> real(const var<T>& x) { return real(x.expr); }
-template <typename T>
-inline ExprPtr<T> imag(const var<T>& x) { return imag(x.expr); }
-template <typename T>
-inline ExprPtr<T> erf(const var<T>& x) { return erf(x.expr); }
+template<typename T> ExprPtr<T> abs(const Variable<T>& x) { return abs(x.expr); }
+template<typename T> ExprPtr<T> abs2(const Variable<T>& x) { return abs2(x.expr); }
+template<typename T> ExprPtr<T> conj(const Variable<T>& x) { return conj(x.expr); }
+template<typename T> ExprPtr<T> real(const Variable<T>& x) { return real(x.expr); }
+template<typename T> ExprPtr<T> imag(const Variable<T>& x) { return imag(x.expr); }
+template<typename T> ExprPtr<T> erf(const Variable<T>& x) { return erf(x.expr); }
 
 //------------------------------------------------------------------------------
 // ACTIVATION FUNCTIONS
 //------------------------------------------------------------------------------
-template <typename T>
-inline ExprPtr<T> sigmoid(const var<T>& x) { return sigmoid(x.expr); }
-template <typename T>
-inline ExprPtr<T> relu(const var<T>& x) { return relu(x.expr); }
+template <typename T> ExprPtr<T> sigmoid(const Variable<T>& x) { return sigmoid(x.expr); }
+template <typename T> ExprPtr<T> relu(const Variable<T>& x) { return relu(x.expr); }
 
-/// Return the value of a variable x.
-template <typename T>
-inline T val(const var<T>& x)
+/// Return the value of a scalar.
+template<typename U, EnableIf<isArithmetic<U>>...>
+auto val(const U& x)
 {
-    return x.expr->val;
+    return x;
 }
 
-template <typename T>
-using Derivatives = std::function<T(const var<T>&)>;
-template <typename T>
-using DerivativesX = std::function<var<T>(const var<T>&)>;
-
-/// Return the derivatives of a variable y with respect to all independent variables.
+/// Return the value of a variable.
 template<typename T>
-inline Derivatives<T> derivatives(const var<T>& y)
+auto val(const Variable<T>& x)
 {
-    DerivativesMap<T> map;
+    return val(x.expr->val);
+}
 
-    y.expr->propagate(map, 1.0);
-
-    auto fn = [=](const var<T>& x)
-    {
-        const auto it = map.find(x.expr.get());
-        return it != map.end() ? it->second : 0.0;
-    };
-
-    return fn;
+/// Return the value of an expression.
+template<typename T>
+auto val(const ExprPtr<T>& x)
+{
+    return val(x->val);
 }
 
 /// Return the derivatives of a variable y with respect to all independent variables.
 template<typename T>
-inline DerivativesX<T> derivativesx(const var<T>& y)
+[[deprecated("Use method `derivatives(y, wrt(a, b, c,...)` instead.")]]
+auto derivatives(const T& y)
 {
-    DerivativesMapX<T> map;
-
-    y.expr->propagate(map, constant(1.0));
-
-    auto fn = [=](const var<T>& x)
-    {
-        const auto it = map.find(x.expr.get());
-        return it != map.end() ? it->second : constant(0.0);
-    };
-
-    return fn;
+    static_assert(!std::is_same_v<T,T>, "Method derivatives(const var&) has been deprecated. Use method derivatives(y, wrt(a, b, c,...) instead.");
 }
 
-/// Output a var object variable to the output stream.
+/// Return the derivatives of a variable y with respect to all independent variables.
 template<typename T>
-inline std::ostream& operator<<(std::ostream& out, const var<T>& x)
+[[deprecated("Use method derivativesx(y, wrt(a, b, c,...) instead.")]]
+auto derivativesx(const T& y)
 {
-    out << autodiff::val<T>(x);
+    static_assert(!std::is_same_v<T,T>, "Method derivativesx(const var&) has been deprecated. Use method derivativesx(y, wrt(a, b, c,...) instead.");
+}
+
+template<typename... Vars>
+struct Wrt
+{
+    std::tuple<Vars...> args;
+};
+
+/// The keyword used to denote the variables *with respect to* the derivative is calculated.
+template<typename... Args>
+auto wrt(Args&&... args)
+{
+    return Wrt<Args&&...>{ std::forward_as_tuple(std::forward<Args>(args)...) };
+}
+
+/// Seed each variable in the **wrt** list.
+template<typename... Vars>
+auto seed(const Wrt<Vars...>& wrt)
+{
+    constexpr static auto N = sizeof...(Vars);
+    For<N>([&](auto i) constexpr {
+        std::get<i>(wrt.args).seed();
+    });
+}
+
+/// Seed each variable in the **wrt** list.
+template<typename... Vars>
+auto seedx(const Wrt<Vars...>& wrt)
+{
+    constexpr static auto N = sizeof...(Vars);
+    For<N>([&](auto i) constexpr {
+        std::get<i>(wrt.args).seedx();
+    });
+}
+
+/// Return the derivatives of a dependent variable y with respect given independent variables.
+template<typename T, typename... Vars>
+auto derivatives(const Variable<T>& y, const Wrt<Vars...>& wrt)
+{
+    seed(wrt);
+    y.expr->propagate(1.0);
+
+    constexpr static auto N = sizeof...(Vars);
+    std::array<T, N> values;
+    For<N>([&](auto i) constexpr {
+        values[i.index] = std::get<i>(wrt.args).grad();
+    });
+
+    return values;
+}
+
+/// Return the derivatives of a dependent variable y with respect given independent variables.
+template<typename T, typename... Vars>
+auto derivativesx(const Variable<T>& y, const Wrt<Vars...>& wrt)
+{
+    seedx(wrt);
+    y.expr->propagatex(constant<T>(1.0));
+
+    constexpr static auto N = sizeof...(Vars);
+    std::array<Variable<T>, N> values;
+    For<N>([&](auto i) constexpr {
+        values[i.index] = std::get<i>(wrt.args).gradx();
+    });
+
+    return values;
+}
+
+/// Output a Variable object to the output stream.
+template<typename T>
+std::ostream& operator<<(std::ostream& out, const Variable<T>& x)
+{
+    out << val(x);
     return out;
 }
+
+/// Output an ExprPrt object to the output stream.
+template<typename T>
+std::ostream& operator<<(std::ostream& out, const ExprPtr<T>& x)
+{
+    out << val(x);
+    return out;
+}
+
+//=====================================================================================================================
+//
+// HIGHER-ORDER VAR NUMBERS
+//
+//=====================================================================================================================
+
+template<size_t N, typename T>
+struct AuxHigherOrderVariable;
+
+template<typename T>
+struct AuxHigherOrderVariable<0, T>
+{
+    using type = T;
+};
+
+template<size_t N, typename T>
+struct AuxHigherOrderVariable
+{
+    using type = Variable<typename AuxHigherOrderVariable<N - 1, T>::type>;
+};
+
+template<size_t N, typename T>
+using HigherOrderVariable = typename AuxHigherOrderVariable<N, T>::type;
+
+} // namespace reverse
+
+using reverse::wrt;
+using reverse::derivatives;
+using reverse::Variable;
+using reverse::val;
+
+using var = Variable<double>;
 
 } // namespace autodiff

@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common.hpp"
-#include <execution>
+//#include <execution>
 #include <algorithm>
 #include <random>
 
@@ -21,10 +21,10 @@ typedef uint8_t mnist_label_t;
 
 template<typename T>
 struct mnist_enumerable {
-  const VectorXvar<T> *pimgs, *plabels;
+  const VectorXtvar<T> *pimgs, *plabels;
   int len;
   vector<int> idx;
-  mnist_enumerable(const VectorXvar<T>* imgs, const VectorXvar<T>* labels, const int len):
+  mnist_enumerable(const VectorXtvar<T>* imgs, const VectorXtvar<T>* labels, const int len):
     pimgs(imgs), plabels(labels), len(len), idx(len)
   { 
     for (int i = 0; i < len; ++i) {
@@ -40,8 +40,8 @@ struct mnist_enumerable {
 
 template<typename T>
 struct mnist_train_t {
-  VectorXvar<T> imgs[c_mnist_train_size];
-  VectorXvar<T> labels[c_mnist_train_size];
+  VectorXtvar<T> imgs[c_mnist_train_size];
+  VectorXtvar<T> labels[c_mnist_train_size];
   mnist_enumerable<T> shuffle() const {
     return mnist_enumerable(imgs, labels, c_mnist_train_size);
   }
@@ -76,9 +76,9 @@ const mnist_train_t<T>* load_train() {
 
   vector<int> idx(c_mnist_train_size);
   std::iota(idx.begin(), idx.end(), 0);
-  std::for_each(std::execution::par_unseq, idx.begin(), idx.end(), [&](auto i) {
-    p->imgs[i] = VectorXvar<T>::Zero(c_mnist_imgh * c_mnist_imgw);
-    p->labels[i] = VectorXvar<T>::Zero(10);
+  std::for_each(idx.begin(), idx.end(), [&](auto i) {
+    p->imgs[i] = VectorXtvar<T>::Zero(c_mnist_imgh * c_mnist_imgw);
+    p->labels[i] = VectorXtvar<T>::Zero(10);
     for (int j = 0; j < 10; ++j) {
       if (labels[i] == j) {
         p->labels[i][j] = T(1.0);

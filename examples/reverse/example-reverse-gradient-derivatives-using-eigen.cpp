@@ -12,20 +12,19 @@ using namespace Eigen;
 using namespace autodiff;
 
 // The scalar function for which the gradient is needed
-template<typename T>
-var<T> f(const VectorXvar<T>& x)
+var f(const VectorXvar& x)
 {
     return sqrt(x.cwiseProduct(x).sum()); // sqrt(sum([x(i) * x(i) for i = 1:5]))
 }
 
 int main()
 {
-    VectorXvar<double> x(5);               // the input vector x with 5 variables
+    VectorXvar x(5);               // the input vector x with 5 variables
     x << 1, 2, 3, 4, 5;                    // x = [1, 2, 3, 4, 5]
 
-    var<double> y = f(x);                          // the output variable y
+    var y = f(x);                          // the output variable y
 
-    VectorXvar<double> dydx = gradient(y, x);        // evaluate the gradient vector dy/dx
+    VectorXvar dydx = gradient(y, x);        // evaluate the gradient vector dy/dx
 
     cout << "y = " << y << endl;           // print the evaluated output y
     cout << "dy/dx = \n" << dydx << endl;  // print the evaluated gradient vector dy/dx

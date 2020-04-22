@@ -3,6 +3,7 @@
 #include <cinttypes>
 #include <limits>
 #include <iostream>
+#include <cmath>
 
 namespace qnum {
 
@@ -218,6 +219,11 @@ using qnum64_t = qspace_number_t<int64_t>;
 namespace std
 {
   using namespace qnum;
+
+  template <> struct is_floating_point<qnum8_t> : true_type { };
+  template <> struct is_floating_point<qnum16_t> : true_type { };
+  template <> struct is_floating_point<qnum32_t> : true_type { };
+  template <> struct is_floating_point<qnum64_t> : true_type { };
 
   template<typename T>
   qspace_number_t<T> log10(const qspace_number_t<T>& q) noexcept

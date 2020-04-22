@@ -12,21 +12,22 @@ using namespace Eigen;
 using namespace autodiff;
 
 // The scalar function for which the gradient is needed
-template <typename T>
-var<T> f(const VectorXvar<T>& x)
+var f(const VectorXvar& x)
 {
     return sqrt(x.cwiseProduct(x).sum()); // sqrt(sum([x(i) * x(i) for i = 1:5]))
 }
 
 int main()
 {
-    VectorXvar<double> x(5);                       // the input vector x with 5 variables
-    x << 1, 2, 3, 4, 5;                    // x = [1, 2, 3, 4, 5]
+    VectorXvar x(5);     // the input vector x with 5 variables
+    x << 1, 2, 3, 4, 5;  // x = [1, 2, 3, 4, 5]
 
-    var<double> u = f(x);                          // the output variable u
+    var u = f(x);  // the output variable u
 
-    MatrixXvar<double> dudx = hessian(u, x);         // evaluate the Hessian matrix d2u/dx2
+    VectorXd g;  // the gradient vector to be computed in method `hessian`
+    MatrixXd H = hessian(u, x, g);  // evaluate the Hessian matrix H and the gradient vector g of u
 
-    cout << "u = " << u << endl;           // print the evaluated output u
-    cout << "du/dx = \n" << dudx << endl;  // print the evaluated gradient vector du/dx
+    cout << "u = " << u << endl;    // print the evaluated output variable u
+    cout << "g = \n" << g << endl;  // print the evaluated gradient vector of u
+    cout << "H = \n" << H << endl;  // print the evaluated Hessian matrix of u
 }

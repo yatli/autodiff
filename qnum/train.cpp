@@ -51,7 +51,9 @@ int main(int argc, char* argv[]) {
       cout << "forward" << endl;
       auto label_predict = net.forward(img);
       auto loss = loss_crossent(label, label_predict);
-      cout << "loss = " << loss << endl;
+      debug_dump(label);
+      debug_dump(label_predict);
+      debug_dump(loss);
       cout << "derivatives" << endl;
       auto dyd = derivatives(loss);
       cout << "backward" << endl;

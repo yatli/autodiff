@@ -75,9 +75,7 @@ const mnist_train_t<T>* load_train() {
   fclose(label_fp);
 
   vector<int> idx(c_mnist_train_size);
-  for (int i = 0; i < c_mnist_train_size; ++i) {
-    idx[i] = i;
-  }
+  std::iota(idx.begin(), idx.end(), 0);
   std::for_each(std::execution::par_unseq, idx.begin(), idx.end(), [&](auto i) {
     p->imgs[i] = VectorXvar<T>::Zero(c_mnist_imgh * c_mnist_imgw);
     p->labels[i] = VectorXvar<T>::Zero(10);

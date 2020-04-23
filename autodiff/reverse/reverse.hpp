@@ -39,6 +39,8 @@
 #include <algorithm>
 #include <iostream>
 #include <iomanip>
+#include <functional>
+#include <atomic>
 
 // autodiff includes
 #include <autodiff/common/meta.hpp>
@@ -427,6 +429,37 @@ struct BinaryExpr : Expr<T>
       l->print(indent + 2);
       r->print(indent + 2);
     }
+
+    template<typename U, typename V> ExprPtr<T> collect_rewrite() {
+
+      auto ltyped = dynamic_cast<U*>(l.get());
+      auto rtyped = dynamic_cast<U*>(r.get());
+
+      if (!ltyped && !rtyped) {
+        return this->BinaryExpr::rewrite();
+      }
+
+      std::vector<ExprPtr<T>> elements;
+      std::function<void(const ExprPtr<T> &p)> collect;
+      collect = [&] (const ExprPtr<T> &p) {
+        auto ptyped = dynamic_cast<U*>(p.get());
+        auto paggregated = dynamic_cast<V*>(p.get());
+        if (paggregated) {
+          for(const auto& c: paggregated->elements) {
+            collect(c);
+          }
+        } else if (ptyped) {
+          collect(ptyped->l);
+          collect(ptyped->r);
+        } else {
+          elements.push_back(p);
+        }
+      };
+      collect(this->l);
+      collect(this->r);
+      auto aggregated = std::make_shared<V>(this->val, elements);
+      return aggregated;
+    }
 };
 
 template<typename T>
@@ -452,28 +485,6 @@ struct SumExpr : Expr<T>
     }
   }
 
-  virtual ExprPtr<T> rewrite() 
-  {
-    for(int i = 0; i < elements.size(); ) 
-    {
-      auto ptr = elements[i].get();
-      auto add = dynamic_cast<AddExpr<T>*>(ptr);
-      auto sum = dynamic_cast<SumExpr<T>*>(ptr);
-      if (!add && !sum) {
-        ++i;
-        continue;
-      }
-      if(add) {
-        elements.push_back(add->l);
-        elements.push_back(add->r);
-      } else {
-        elements.insert(elements.end(), sum->elements.begin(), sum->elements.end());
-      }
-      elements.erase(elements.cbegin() + i);
-    }
-    return nullptr;
-  }
-
   virtual void print(int indent) 
   { 
     this->Expr<T>::print(indent);
@@ -494,13 +505,12 @@ struct ProdExpr : Expr<T>
 
   virtual void propagate(const T& wprime) 
   {
+    auto prod = wprime;
     for (auto x: elements) {
-      auto w = wprime;
-      for(const auto &y: elements) {
-        if (y == x) continue;
-        w *= y->val;
-      }
-      x->propagate(w);
+      prod *= x->val;
+    }
+    for (auto x: elements) {
+      x->propagate(prod / x->val);
     }
   }
 
@@ -514,28 +524,6 @@ struct ProdExpr : Expr<T>
       }
       x->propagatex(w);
     }
-  }
-
-  virtual ExprPtr<T> rewrite() 
-  {
-    for(int i = 0; i < elements.size(); ) 
-    {
-      auto ptr = elements[i].get();
-      auto mul = dynamic_cast<MulExpr<T>*>(ptr);
-      auto prod = dynamic_cast<ProdExpr<T>*>(ptr);
-      if (!mul && !prod) {
-        ++i;
-        continue;
-      }
-      if(mul) {
-        elements.push_back(mul->l);
-        elements.push_back(mul->r);
-      } else {
-        elements.insert(elements.end(), prod->elements.begin(), prod->elements.end());
-      }
-      elements.erase(elements.cbegin() + i);
-    }
-    return nullptr;
   }
 
   virtual void print(int indent) { 
@@ -572,17 +560,7 @@ struct AddExpr : BinaryExpr<T>
 
     virtual ExprPtr<T> rewrite() 
     {
-      this->BinaryExpr<T>::rewrite();
-      auto ladd = dynamic_cast<AddExpr<T>*>(l.get());
-      auto radd = dynamic_cast<AddExpr<T>*>(r.get());
-      if (ladd || radd) {
-        std::vector<ExprPtr<T>> elements = {l, r};
-        auto sum = std::make_shared<SumExpr<T>>(this->val, elements);
-        sum->rewrite();
-        return sum;
-      } else {
-        return nullptr;
-      }
+      return this->template collect_rewrite<AddExpr<T>, SumExpr<T>>();
     }
 };
 
@@ -632,17 +610,7 @@ struct MulExpr : BinaryExpr<T>
 
     virtual ExprPtr<T> rewrite() 
     {
-      this->BinaryExpr<T>::rewrite();
-      auto lmul = dynamic_cast<MulExpr<T>*>(l.get());
-      auto rmul = dynamic_cast<MulExpr<T>*>(r.get());
-      if (lmul || rmul) {
-        std::vector<ExprPtr<T>> elements = {l, r};
-        auto prod = std::make_shared<ProdExpr<T>>(this->val, elements);
-        prod->rewrite();
-        return prod;
-      } else {
-        return nullptr;
-      }
+      return this->template collect_rewrite<MulExpr<T>, ProdExpr<T>>();
     }
 };
 
@@ -1277,6 +1245,8 @@ struct Variable
     template<typename U, EnableIf<isArithmetic<U>>...> Variable& operator-=(const U& x) { *this = Variable(expr - x); return *this; }
     template<typename U, EnableIf<isArithmetic<U>>...> Variable& operator*=(const U& x) { *this = Variable(expr * x); return *this; }
     template<typename U, EnableIf<isArithmetic<U>>...> Variable& operator/=(const U& x) { *this = Variable(expr / x); return *this; }
+
+    static Variable<T> make_const(const T val) { return Variable<T>(std::make_shared<ConstantExpr<T>>(val)); }
 };
 
 //------------------------------------------------------------------------------

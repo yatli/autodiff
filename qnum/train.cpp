@@ -1,5 +1,6 @@
 #include "common.hpp"
 #include "data.hpp"
+#include <thread>
 
 template<typename T>
 struct mlp_t {
@@ -22,8 +23,11 @@ struct mlp_t {
 
   void backward(const Variable<T>& loss) {
     //cout << "rewrite" << endl;
-    //loss.expr->rewrite();
+    loss.expr->rewrite();
     loss.expr->propagate(0.01);
+  }
+
+  void learn() {
     for (int i = 0; i < sz_input; ++i) {
       for (int j = 0; j < sz_hidden; ++j) {
         auto& e = w1(j, i + 1);
@@ -39,29 +43,50 @@ struct mlp_t {
       }
     }
   }
-
 };
 
-int main(int argc, char* argv[]) {
+template<typename T> void train() {
   cout << "loading data..." << endl;
-  auto ptrain = load_train<qnum8_t>();
+  auto ptrain = load_train<T>();
   cout << "initializing network..." << endl;
-  mlp_t<qnum8_t> net(28*28, 128, 10);
+  mlp_t<T> net(28*28, 128, 10);
 
   for (int epoch = 0;; ++epoch) {
     cout << "epoch " << epoch << endl;
-    int smp = 0;
-    for (auto i : ptrain->shuffle()) {
-      auto img = ptrain->imgs[i];
-      auto label = ptrain->labels[i];
-      auto label_predict = net.forward(img);
-      auto loss = loss_crossent(label, label_predict);
-      //debug_dump(label);
-      //debug_dump(label_predict);
-      cout << "loss = " << setw(10) << loss << ", sample " << setw(5) << smp << "/60000" << endl;
-      smp++;
-      net.backward(loss);
+    auto samples = ptrain->shuffle();
+    auto batch_size = 8;
+    for (auto i = 0; i < ptrain->size(); i += batch_size) {
+      std::vector<std::thread> threads;
+      std::vector<T> losses(batch_size);
+      for(auto j = 0; j < batch_size && i + j < ptrain->size(); ++j) {
+        threads.emplace_back([&](auto idx){
+          auto img = ptrain->imgs[idx];
+          auto label = ptrain->labels[idx];
+          auto label_predict = net.forward(img);
+          auto loss = loss_crossent(label, label_predict);
+          losses[idx - i] = loss.expr->val;
+          net.backward(loss);
+        }, i+j);
+      }
+
+      for(auto &t: threads) {
+        t.join();
+      }
+      net.learn();
+      cout << "loss = " << setw(10) << losses[0] << ", sample " << setw(5) << i << "/60000" << endl;
     }
+  }
+}
+
+int main(int argc, char* argv[]) {
+  std::string type = argv[1];
+
+  if(type == "qnum16") train<qnum16_t>();
+  else if (type == "qnum32") train<qnum32_t>();
+  else if (type == "f32") train<float>();
+  else if (type == "f64") train<double>();
+  else {
+    cout << "unknown data type " << type << "." << endl;
   }
 
   return 0;

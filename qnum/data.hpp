@@ -45,6 +45,7 @@ struct mnist_train_t {
   mnist_enumerable<T> shuffle() const {
     return mnist_enumerable(imgs, labels, c_mnist_train_size);
   }
+  constexpr auto size() const { return c_mnist_train_size; }
 };
 
 template<typename T>
@@ -81,14 +82,14 @@ const mnist_train_t<T>* load_train() {
     p->labels[i].resize(10);// = VectorXtvar<T>::Zero(10);
     for (int j = 0; j < 10; ++j) {
       if (labels[i] == j) {
-        p->labels[i][j] = T(1.0);
+        p->labels[i][j] = Variable<T>::make_const(T(1.0));
       }
       else {
-        p->labels[i][j] = T(0.0);
+        p->labels[i][j] = Variable<T>::make_const(T(0.0));
       }
     }
     for (int j = 0; j < c_mnist_imgh * c_mnist_imgw; ++j) {
-      p->imgs[i][j] = T(imgs[i][j] / 256.0);
+      p->imgs[i][j] = Variable<T>::make_const(T(imgs[i][j] / 256.0));
     }
   });
 

@@ -41,6 +41,7 @@
 #include <iomanip>
 #include <functional>
 #include <atomic>
+#include <stack>
 
 // autodiff includes
 #include <autodiff/common/meta.hpp>
@@ -230,8 +231,16 @@ struct Expr
     /// The value of this expression node.
     T val = {};
 
+    /// The derivative of the root expression node with respect to this variable.
+    T grad = {};
+
+    /// The derivative of the root expression node with respect to this variable (as an expression for higher-order derivatives).
+    ExprPtr<T> gradx = {};
+
     /// Construct an Expr object with given value.
     explicit Expr(const T& val) : val(val) {}
+
+    virtual void propagate_step() = 0;
 
     /// Update the contribution of this expression in the derivative of the root node of the expression tree.
     /// @param wprime The derivative of the root expression node w.r.t. the child expression of this expression node.
@@ -249,6 +258,8 @@ struct Expr
     { 
       std::cout << std::string(indent, ' ') << name() << std::endl;
     }
+
+    virtual void topology_sort(std::vector<ExprPtr<T>>& vec) = 0;
 };
 
 #define DECLARE_NAME(x) \
@@ -259,12 +270,6 @@ template<typename T>
 struct VariableExpr : Expr<T>
 {
     DECLARE_NAME(VariableExpr);
-
-    /// The derivative of the root expression node with respect to this variable.
-    T grad = {};
-
-    /// The derivative of the root expression node with respect to this variable (as an expression for higher-order derivatives).
-    ExprPtr<T> gradx = {};
 
     /// Construct a VariableExpr object with given value.
     VariableExpr(const T& val) : Expr<T>(val) {}
@@ -285,6 +290,8 @@ struct IndependentVariableExpr : VariableExpr<T>
     {
         gradx = constant<T>(0.0); // TODO: Check if this can be done at the seed function.
     }
+
+    virtual void propagate_step() { }
 
     virtual void propagate(const T& wprime)
     {
@@ -314,6 +321,10 @@ struct DependentVariableExpr : VariableExpr<T>
     DependentVariableExpr(const ExprPtr<T>& expr) : VariableExpr<T>(expr->val), expr(expr)
     {
         gradx = constant<T>(0.0); // TODO: Check if this can be done at the seed function.
+    }
+
+    virtual void propagate_step() { 
+      expr->grad += this->grad;
     }
 
     virtual void propagate(const T& wprime)
@@ -349,6 +360,9 @@ struct ConstantExpr : Expr<T>
     DECLARE_NAME(ConstantExpr);
 
     using Expr<T>::Expr;
+
+    virtual void propagate_step() 
+    {}
 
     virtual void propagate(const T& wprime)
     {}
@@ -390,6 +404,11 @@ struct NegativeExpr : UnaryExpr<T>
     using UnaryExpr<T>::x;
 
     using UnaryExpr<T>::UnaryExpr;
+
+    virtual void propagate_step() 
+    {
+      x->grad -= this->grad;
+    }
 
     virtual void propagate(const T& wprime)
     {
@@ -471,6 +490,13 @@ struct SumExpr : Expr<T>
 
   SumExpr(const T& val, const std::vector<ExprPtr<T>> es): Expr<T>(val), elements(es) {}
 
+  virtual void propagate_step() 
+  {
+    for(auto x: elements) {
+      x->grad += this->grad;
+    }
+  }
+
   virtual void propagate(const T& wprime) 
   {
     for(auto x: elements) {
@@ -502,6 +528,17 @@ struct ProdExpr : Expr<T>
   std::vector<ExprPtr<T>> elements;
 
   ProdExpr(const T& val, const std::vector<ExprPtr<T>> es): Expr<T>(val), elements(es) {}
+
+  virtual void propagate_step() 
+  {
+    auto prod = this->grad;
+    for (auto x: elements) {
+      prod *= x->val;
+    }
+    for (auto x: elements) {
+      x->grad += prod / x->val;
+    }
+  }
 
   virtual void propagate(const T& wprime) 
   {
@@ -546,6 +583,12 @@ struct AddExpr : BinaryExpr<T>
 
     using BinaryExpr<T>::BinaryExpr;
 
+    virtual void propagate_step() 
+    {
+      l->grad += this->grad;
+      r->grad += this->grad;
+    }
+
     virtual void propagate(const T& wprime)
     {
         l->propagate(wprime);
@@ -573,6 +616,12 @@ struct SubExpr : BinaryExpr<T>
     using BinaryExpr<T>::r;
     using BinaryExpr<T>::BinaryExpr;
 
+    virtual void propagate_step() 
+    {
+      l->grad += this->grad;
+      r->grad -= this->grad;
+    }
+
     virtual void propagate(const T& wprime)
     {
         l->propagate( wprime);
@@ -595,6 +644,12 @@ struct MulExpr : BinaryExpr<T>
     using BinaryExpr<T>::l;
     using BinaryExpr<T>::r;
     using BinaryExpr<T>::BinaryExpr;
+
+    virtual void propagate_step() 
+    {
+      l->grad += this->grad * r->val;
+      r->grad -= this->grad * l->val;
+    }
 
     virtual void propagate(const T& wprime)
     {
@@ -623,6 +678,14 @@ struct DivExpr : BinaryExpr<T>
     using BinaryExpr<T>::r;
     using BinaryExpr<T>::BinaryExpr;
 
+    virtual void propagate_step() 
+    {
+      const auto aux1 = T(1.0) / r->val;
+      const auto aux2 = -l->val * aux1 * aux1;
+      l->grad += (this->grad * aux1);
+      r->grad += (this->grad * aux2);
+    }
+
     virtual void propagate(const T& wprime)
     {
         const auto aux1 = T(1.0) / r->val;
@@ -649,6 +712,11 @@ struct SinExpr : UnaryExpr<T>
 
     SinExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
 
+    virtual void propagate_step() 
+    {
+      x->grad += this->grad * std::cos(x->val);
+    }
+
     virtual void propagate(const T& wprime)
     {
         x->propagate(wprime * std::cos(x->val));
@@ -669,6 +737,11 @@ struct CosExpr : UnaryExpr<T>
 
     CosExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
 
+    virtual void propagate_step() 
+    {
+      x->grad -= this->grad * std::sin(x->val);
+    }
+
     virtual void propagate(const T& wprime)
     {
         x->propagate(-wprime * std::sin(x->val));
@@ -688,6 +761,12 @@ struct TanExpr : UnaryExpr<T>
     using UnaryExpr<T>::x;
 
     TanExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate_step() 
+    {
+      const auto aux = 1.0 / std::cos(x->val);
+      x->grad += this->grad * aux * aux;
+    }
 
     virtual void propagate(const T& wprime)
     {
@@ -711,6 +790,11 @@ struct SinhExpr : UnaryExpr<T>
 
     SinhExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
 
+    virtual void propagate_step() 
+    {
+      x->grad += this->grad * std::cosh(x->val);
+    }
+
     virtual void propagate(const T& wprime)
     {
         x->propagate(wprime * std::cosh(x->val));
@@ -731,6 +815,11 @@ struct CoshExpr : UnaryExpr<T>
 
     CoshExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
 
+    virtual void propagate_step() 
+    {
+      x->grad += this->grad * std::sinh(x->val);
+    }
+
     virtual void propagate(const T& wprime)
     {
         x->propagate(wprime * std::sinh(x->val));
@@ -750,6 +839,12 @@ struct TanhExpr : UnaryExpr<T>
     using UnaryExpr<T>::x;
 
     TanhExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate_step() 
+    {
+      const auto aux = 1.0 / std::cosh(x->val);
+      x->grad += this->grad * aux * aux;
+    }
 
     virtual void propagate(const T& wprime)
     {
@@ -773,6 +868,11 @@ struct ArcSinExpr : UnaryExpr<T>
 
     ArcSinExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
 
+    virtual void propagate_step() 
+    {
+      x->grad += this->grad / std::sqrt(1.0 - x->val * x->val);
+    }
+
     virtual void propagate(const T& wprime)
     {
         x->propagate(wprime / std::sqrt(1.0 - x->val * x->val));
@@ -792,6 +892,11 @@ struct ArcCosExpr : UnaryExpr<T>
     using UnaryExpr<T>::x;
 
     ArcCosExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate_step() 
+    {
+      x->grad -= this->grad / std::sqrt(1.0 - x->val * x->val);
+    }
 
     virtual void propagate(const T& wprime)
     {
@@ -813,6 +918,11 @@ struct ArcTanExpr : UnaryExpr<T>
 
     ArcTanExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
 
+    virtual void propagate_step() 
+    {
+      x->grad += this->grad / (1.0 + x->val * x->val);
+    }
+
     virtual void propagate(const T& wprime)
     {
         x->propagate(wprime / (1.0 + x->val * x->val));
@@ -833,6 +943,11 @@ struct ExpExpr : UnaryExpr<T>
     using UnaryExpr<T>::val;
     using UnaryExpr<T>::x;
 
+    virtual void propagate_step() 
+    {
+      x->grad += this->grad * val;
+    }
+
     virtual void propagate(const T& wprime)
     {
         x->propagate(wprime * val);
@@ -851,6 +966,11 @@ struct LogExpr : UnaryExpr<T>
     // Using declarations for data members of base class
     using UnaryExpr<T>::x;
     using UnaryExpr<T>::UnaryExpr;
+
+    virtual void propagate_step() 
+    {
+      x->grad += this->grad / x->val;
+    }
 
     virtual void propagate(const T& wprime)
     {
@@ -873,6 +993,11 @@ struct Log10Expr : UnaryExpr<T>
     constexpr static auto ln10 = static_cast<VariableValueType<T>>(2.3025850929940456840179914546843);
 
     Log10Expr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate_step() 
+    {
+      x->grad += this->grad / (ln10 * x->val);
+    }
 
     virtual void propagate(const T& wprime)
     {
@@ -897,6 +1022,15 @@ struct PowExpr : BinaryExpr<T>
     T log_l;
 
     PowExpr(const T& val, const ExprPtr<T>& l, const ExprPtr<T>& r) : BinaryExpr<T>(val, l, r), log_l(std::log(l->val)) {}
+
+    virtual void propagate_step() 
+    {
+      const auto lval = l->val;
+      const auto rval = r->val;
+      const auto aux = this->grad * val;
+      l->grad += aux * rval / lval;
+      r->grad += aux * std::log(lval);
+    }
 
     virtual void propagate(const T& wprime)
     {
@@ -926,6 +1060,11 @@ struct PowConstantLeftExpr : BinaryExpr<T>
 
     PowConstantLeftExpr(const T& val, const ExprPtr<T>& l, const ExprPtr<T>& r) : BinaryExpr<T>(val, l, r) {}
 
+    virtual void propagate_step() 
+    {
+      r->grad += this->grad * val * std::log(l->val);
+    }
+
     virtual void propagate(const T& wprime)
     {
         r->propagate(wprime * val * std::log(l->val));
@@ -948,6 +1087,11 @@ struct PowConstantRightExpr : BinaryExpr<T>
 
     PowConstantRightExpr(const T& val, const ExprPtr<T>& l, const ExprPtr<T>& r) : BinaryExpr<T>(val, l, r) {}
 
+    virtual void propagate_step() 
+    {
+        l->grad += this->grad * val * r->val / l->val;
+    }
+
     virtual void propagate(const T& wprime)
     {
         l->propagate(wprime * val * r->val / l->val);
@@ -967,6 +1111,11 @@ struct SqrtExpr : UnaryExpr<T>
     using UnaryExpr<T>::x;
 
     SqrtExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate_step() 
+    {
+      x->grad += this->grad / (2.0 * std::sqrt(x->val));
+    }
 
     virtual void propagate(const T& wprime)
     {
@@ -988,6 +1137,12 @@ struct AbsExpr : UnaryExpr<T>
     using U = VariableValueType<T>;
 
     AbsExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate_step() 
+    {
+      if(x->val < 0.0) x->grad -= this->grad;
+      else x->grad += this->grad;
+    }
 
     virtual void propagate(const T& wprime)
     {
@@ -1013,6 +1168,12 @@ struct ErfExpr : UnaryExpr<T>
 
     ErfExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
 
+    virtual void propagate_step() 
+    {
+      const auto aux = 2.0/sqrt_pi * std::exp(-(x->val)*(x->val));
+      x->grad += this->grad * aux;
+    }
+
     virtual void propagate(const T& wprime)
     {
         const auto aux = 2.0/sqrt_pi * std::exp(-(x->val)*(x->val));
@@ -1035,15 +1196,22 @@ struct SigmoidExpr : UnaryExpr<T>
     
     SigmoidExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
 
-    // XXX wrong! check this!
+    virtual void propagate_step() 
+    {
+      auto aux = std::exp(x->val);
+      x->grad += this->grad * aux / (aux + T(1.0)) / (aux + T(1.0));
+    }
+
     virtual void propagate(const T& wprime)
     {
-        x->propagate(wprime / (std::exp(x->val) + std::exp(-x->val) + T(2.0)));
+        auto aux = std::exp(x->val);
+        x->propagate(wprime * aux / (aux + T(1.0)) / (aux + T(1.0)));
     }
 
     virtual void propagatex(const ExprPtr<T>& wprime)
     {
-        x->propagatex(wprime / (exp(x) + exp(-x) + T(2.0)));
+        auto aux = exp(x);
+        x->propagatex(wprime * aux / (aux + T(1.0)) / (aux + T(1.0)));
     }
 };
 
@@ -1055,6 +1223,12 @@ struct ReLUExpr : UnaryExpr<T>
     using UnaryExpr<T>::x;
     
     ReLUExpr(const T& val, const ExprPtr<T>& x) : UnaryExpr<T>(val, x) {}
+
+    virtual void propagate_step() 
+    {
+      const auto aux = x->val >= 0.0 ? T(1.0) : T(0.0);
+      x->grad += this->grad * aux;
+    }
 
     virtual void propagate(const T& wprime)
     {
@@ -1200,20 +1374,17 @@ struct Variable
     /// Construct a Variable object with given expression
     Variable(const ExprPtr<T>& expr) : expr(expr) {}
 
-    /// Return a pointer to the underlying VariableExpr object in this variable.
-    auto __variableExpr() const { return static_cast<VariableExpr<T>*>(expr.get()); }
-
     /// Return the derivative value stored in this variable.
-    auto grad() const { return __variableExpr()->grad; }
+    auto grad() const { return expr->grad; }
 
     /// Return the derivative expression stored in this variable.
-    auto gradx() const { return __variableExpr()->gradx; }
+    auto gradx() const { return expr->gradx; }
 
     /// Reeet the derivative value stored in this variable to zero.
-    auto seed() { __variableExpr()->grad = 0; }
+    auto seed() { expr->grad = 0; }
 
     /// Reeet the derivative expression stored in this variable to zero expression.
-    auto seedx() { __variableExpr()->gradx = constant<T>(0); }
+    auto seedx() { expr->gradx = constant<T>(0); }
 
     /// Rewrite and simplify the expression.
     void rewrite() {
@@ -1246,7 +1417,6 @@ struct Variable
     template<typename U, EnableIf<isArithmetic<U>>...> Variable& operator*=(const U& x) { *this = Variable(expr * x); return *this; }
     template<typename U, EnableIf<isArithmetic<U>>...> Variable& operator/=(const U& x) { *this = Variable(expr / x); return *this; }
 
-    static Variable<T> make_const(const T val) { return Variable<T>(std::make_shared<ConstantExpr<T>>(val)); }
 };
 
 //------------------------------------------------------------------------------

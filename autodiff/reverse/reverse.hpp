@@ -42,6 +42,8 @@
 #include <functional>
 #include <atomic>
 #include <stack>
+#include <unordered_set>
+#include <deque>
 
 // autodiff includes
 #include <autodiff/common/meta.hpp>
@@ -259,7 +261,21 @@ struct Expr
       std::cout << std::string(indent, ' ') << name() << std::endl;
     }
 
-    virtual void topology_sort(std::vector<ExprPtr<T>>& vec) = 0;
+    virtual void children_do(std::function<void(Expr<T>*)> fn) { }
+
+    /// The color in topology_sort
+    char color = {};
+
+    void topology_sort(std::deque<Expr<T>*>& vec) 
+    {
+      if(this->color) return;
+      this->color = 1;
+
+      this->children_do([&](auto x){x->topology_sort(vec); });
+
+      this->color = 2;
+      vec.push_front(this);
+    }
 };
 
 #define DECLARE_NAME(x) \
@@ -352,6 +368,11 @@ struct DependentVariableExpr : VariableExpr<T>
       this->Expr<T>::print(indent);
       expr->print(indent + 2);
     }
+
+    virtual void children_do(std::function<void(Expr<T>*)> fn) 
+    { 
+      fn(expr.get());
+    }
 };
 
 template<typename T>
@@ -392,6 +413,11 @@ struct UnaryExpr : Expr<T>
     { 
       this->Expr<T>::print(indent);
       x->print(indent + 2);
+    }
+
+    virtual void children_do(std::function<void(Expr<T>*)> fn) 
+    { 
+      fn(x.get());
     }
 };
 
@@ -447,6 +473,12 @@ struct BinaryExpr : Expr<T>
       this->Expr<T>::print(indent);
       l->print(indent + 2);
       r->print(indent + 2);
+    }
+
+    virtual void children_do(std::function<void(Expr<T>*)> fn) 
+    { 
+      fn(l.get());
+      fn(r.get());
     }
 
     template<typename U, typename V> ExprPtr<T> collect_rewrite() {
@@ -518,6 +550,14 @@ struct SumExpr : Expr<T>
       x->print(indent + 2);
     }
   }
+
+  virtual void children_do(std::function<void(Expr<T>*)> fn) 
+  { 
+    for(const auto &x: elements) {
+      fn(x.get());
+    }
+  }
+
 };
 
 template<typename T>
@@ -569,6 +609,13 @@ struct ProdExpr : Expr<T>
       x->print(indent + 2);
     }
   }
+
+  virtual void children_do(std::function<void(Expr<T>*)> fn) { 
+    for(const auto &x: elements) {
+      fn(x.get());
+    }
+  }
+
 };
 
 

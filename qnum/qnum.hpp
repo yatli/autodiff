@@ -66,6 +66,10 @@ public:
     return static_cast<double>(val) / T_max() * (1+ext_max());
   }
 
+  explicit operator double() const {
+    return to_double();
+  }
+
   qspace_number_t<T> neg() const {
     return from_literal(-val);
   }

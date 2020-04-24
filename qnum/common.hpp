@@ -123,3 +123,18 @@ VectorXtvar<T> fc_layer(const VectorXtvar<T>& x, const MatrixXtvar<T>& W, Vector
   return f(v);
 }
 
+template<typename T>
+int argmax(const VectorXtvar<T>& x) {
+  const int n = x.size();
+  int ret = 0;
+  double maxval = x[0].expr->val;
+  for (auto i = 1; i < n; ++i) {
+    auto xi = static_cast<double>(x[i].expr->val);
+    if (xi > maxval) {
+      maxval = xi;
+      ret = i;
+    }
+  }
+  return ret;
+}
+

@@ -12,13 +12,13 @@ namespace Eigen
 {
   /// Traits specialization for qspace_number_t.
   /// See Eigen/src/Core/NumTraits.h for documentation.
-  template<typename T> struct NumTraits<qspace_number_t<T>>
-    : GenericNumTraits<qspace_number_t<T>>
+  template<typename T, int E> struct NumTraits<qspace_number_t<T, E>>
+    : GenericNumTraits<qspace_number_t<T, E>>
   {
-    typedef qspace_number_t<T> Real;
-    typedef qspace_number_t<T> NonInteger;
-    typedef qspace_number_t<T> Nested;
-    typedef qspace_number_t<T> Literal;
+    typedef qspace_number_t<T, E> Real;
+    typedef qspace_number_t<T, E> NonInteger;
+    typedef qspace_number_t<T, E> Nested;
+    typedef qspace_number_t<T, E> Literal;
 
     enum {
       IsComplex = 0,
@@ -40,15 +40,15 @@ namespace Eigen
     namespace internal {
       /// Partial specialization for random implementation for qspace numbers.
       /// See MathFunctions.h L535
-      template<typename T> struct random_impl<qspace_number_t<T>>
+      template<typename T, int E> struct random_impl<qspace_number_t<T, E>>
         : random_default_impl
           <
-          qspace_number_t<T>,
-          NumTraits<qspace_number_t<T>>::IsComplex,
-          NumTraits<qspace_number_t<T>>::IsInteger
+          qspace_number_t<T, E>,
+          NumTraits<qspace_number_t<T, E>>::IsComplex,
+          NumTraits<qspace_number_t<T, E>>::IsInteger
           > 
       {
-        typedef qspace_number_t<T> _Q;
+        typedef qspace_number_t<T, E> _Q;
         static inline _Q run(const _Q& x, const _Q& y) {
           if (x > y) return x;
 
@@ -64,15 +64,15 @@ namespace Eigen
         }
       };
 
-      template<typename T> struct random_impl<Variable<qspace_number_t<T>>>
+      template<typename T, int E> struct random_impl<Variable<qspace_number_t<T, E>>>
         : random_default_impl
           <
-          Variable<qspace_number_t<T>>,
-          NumTraits<Variable<qspace_number_t<T>>>::IsComplex,
-          NumTraits<Variable<qspace_number_t<T>>>::IsInteger
+          Variable<qspace_number_t<T, E>>,
+          NumTraits<Variable<qspace_number_t<T, E>>>::IsComplex,
+          NumTraits<Variable<qspace_number_t<T, E>>>::IsInteger
           > 
       {
-        typedef qspace_number_t<T> _Q;
+        typedef qspace_number_t<T, E> _Q;
         static inline Variable<_Q> run(const Variable<_Q>& x, const Variable<_Q>& y) {
           return Variable<_Q>(random_impl<_Q>::run(x.expr->val, y.expr->val));
         }

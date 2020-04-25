@@ -65,6 +65,9 @@ VectorXtvar<T> act_softmax(const VectorXtvar<T>& x) {
     ret[i] = exp(x[i]);
     sum += ret[i];
   }
+  if (sum == 0) {
+    return ret;
+  }
   for (auto i = 0; i < n; ++i) {
     ret[i] = ret[i] / sum;
   }

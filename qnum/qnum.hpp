@@ -37,6 +37,7 @@ struct qspace_number_t
 {
   using T2x = typename number_traits<T>::T2x;
   using Tu = typename number_traits<T>::Tu;
+  using Ts = T;
   T val;
 
 public:
@@ -154,6 +155,10 @@ public:
     return *this;
   }
 
+  bool saturated() const {
+    return val == T_max() || val == T_min();
+  }
+
   static T saturate(const T2x& v) {
     if (v > T_max()) return T_max();
     if (v < T_min()) return T_min();
@@ -209,8 +214,8 @@ qspace_number_t<T> operator / (const qspace_number_t<T> &lhs, const qspace_numbe
 
 // XXX arbitrary values..
 template <> constexpr int qspace_number_t<int8_t>::ext_bits() { return 1; }
-template <> constexpr int qspace_number_t<int16_t>::ext_bits() { return 2; }
-template <> constexpr int qspace_number_t<int32_t>::ext_bits() { return 4; }
+template <> constexpr int qspace_number_t<int16_t>::ext_bits() { return 6; }
+template <> constexpr int qspace_number_t<int32_t>::ext_bits() { return 6; }
 template <> constexpr int qspace_number_t<int64_t>::ext_bits() { return 8; }
 
 using qnum8_t  = qspace_number_t<int8_t>;

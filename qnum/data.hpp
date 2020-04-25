@@ -22,31 +22,17 @@ constexpr auto c_mnist_imgw = 28;
 typedef uint8_t mnist_img_t[c_mnist_imgh * c_mnist_imgw];
 typedef uint8_t mnist_label_t;
 
-template<typename T>
-struct mnist_enumerable_t {
-  const VectorXtvar<T> *pimgs, *plabels;
-  int len;
-  vector<int> idx;
-  mnist_enumerable_t(const VectorXtvar<T>* imgs, const VectorXtvar<T>* labels, const int len):
-    pimgs(imgs), plabels(labels), len(len), idx(len)
-  { 
-    for (int i = 0; i < len; ++i) {
-      idx[i] = i;
-    }
-    std::random_device rd;
-    std::mt19937 g(rd());
-    std::shuffle(idx.begin(), idx.end(), g);
-  }
-  vector<int>::iterator begin() { return idx.begin(); }
-  vector<int>::iterator end() { return idx.end(); }
-};
-
 template<typename T, int sz>
 struct mnist_t {
   VectorXtvar<T> imgs[sz];
   VectorXtvar<T> labels[sz];
-  mnist_enumerable_t<T> shuffle() const {
-    return mnist_enumerable_t(imgs, labels, sz);
+  vector<int> shuffle() const {
+    vector<int> idx(sz);
+    std::iota(idx.begin(), idx.end(), 0);
+    std::random_device rd;
+    std::mt19937 g(rd());
+    std::shuffle(idx.begin(), idx.end(), g);
+    return idx;
   }
   constexpr auto size() const { return sz; }
 };

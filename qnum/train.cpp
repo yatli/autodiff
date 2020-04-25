@@ -48,9 +48,76 @@ struct mlp_t {
       }
     }
   }
-};
 
-constexpr bool parallel = true;
+  void check_histogram() {
+    constexpr int nhist = 20;
+    std::vector<int> histogram(nhist);
+    std::vector<T> bucket_bounds(nhist);
+    double incr = 2.0 / nhist;
+    T cur = -1.0;
+    for(int i=0;i<nhist;++i) {
+      bucket_bounds[i] = cur;
+      cur += incr;
+    }
+    bucket_bounds[nhist/2] = 0;
+
+    for (int j = 0; j < sz_hidden; ++j) {
+      for (int i = 0; i < sz_input; ++i) {
+        auto& e = w1(j, i + 1);
+        for(int k=0;k<nhist;++k) {
+          if (e.expr->val < bucket_bounds[k]) {
+            histogram[k]++;
+            break;
+          }
+        }
+      }
+    }
+    for (int j = 0; j < sz_output; ++j) {
+      for (int i = 0; i < sz_hidden; ++i) {
+        auto& e = w2(j, i + 1);
+        for(int k=0;k<nhist;++k) {
+          if (e.expr->val < bucket_bounds[k]) {
+            histogram[k]++;
+            break;
+          }
+        }
+      }
+    }
+    cout << "[DEBUG] Histogram :" ;
+    for(int i=0;i<nhist;++i) {
+      cout << " " << setw(5) << histogram[i];
+    }
+    cout << endl;
+  }
+
+  void check_saturation() {
+
+    if constexpr(!std::is_same_v<T, float> && !std::is_same_v<T, double>) {
+      int ntotal = 0;
+      int nsat = 0;
+      int nsat_grad = 0;
+
+      for (int j = 0; j < sz_hidden; ++j) {
+        for (int i = 0; i < sz_input; ++i) {
+          auto& e = w1(j, i + 1);
+          ++ntotal;
+          if (e.expr->val.saturated()) ++ nsat;
+          if (e.grad().saturated()) ++ nsat_grad;
+        }
+      }
+      for (int j = 0; j < sz_output; ++j) {
+        for (int i = 0; i < sz_hidden; ++i) {
+          auto& e = w2(j, i + 1);
+          ++ntotal;
+          if (e.expr->val.saturated()) ++ nsat;
+          if (e.grad().saturated()) ++ nsat_grad;
+        }
+      }
+
+      cout << "[DEBUG] Saturation: " << nsat << " / " << nsat_grad << " / " << ntotal << endl;
+    }
+  }
+};
 
 template<typename T> void train() {
   cout << "loading data..." << endl;
@@ -60,12 +127,9 @@ template<typename T> void train() {
   mlp_t<T> net(28*28, 128, 10);
 
   for (int epoch = 0;; ++epoch) {
-    cout << "epoch " << epoch << endl;
+    cout << "[TRAIN] epoch " << epoch << endl;
     auto samples = ptrain->shuffle();
-    auto batch_size = 1;
-    if constexpr(parallel) {
-      batch_size = 8;
-    }
+    auto batch_size = 8;
     auto run = [&](const VectorXtvar<T> &img, 
                   const VectorXtvar<T> &label, 
                   double& loss_store,
@@ -84,38 +148,62 @@ template<typename T> void train() {
     std::vector<int> corrects(batch_size);
     int total_correct = 0;
     double total_loss = 0.0;
+    auto smpidx = ptrain->shuffle();
 
     for (auto i = 0; i < ptrain->size(); i += batch_size) {
-      if constexpr(parallel) {
-        std::vector<std::thread> threads;
-        for(auto j = 0; j < batch_size && i + j < ptrain->size(); ++j) {
-          threads.emplace_back([&](auto idx){
-            run(ptrain->imgs[idx], ptrain->labels[idx], losses[idx - i], corrects[idx - i], true);
-          }, i+j);
-        }
-        for(auto &t: threads) {
-          t.join();
-        }
-      } else {
-        run(ptrain->imgs[i], ptrain->labels[i], losses[0], corrects[0], true);
+      std::vector<std::thread> threads;
+      for(auto j = 0; j < batch_size && i + j < ptrain->size(); ++j) {
+        threads.emplace_back([&](auto idx){
+          run(ptrain->imgs[smpidx[idx]], ptrain->labels[smpidx[idx]], losses[idx - i], corrects[idx - i], true);
+        }, i+j);
       }
-
+      for(auto &t: threads) {
+        t.join();
+      }
       net.learn(T(0.01));
+
+      if ((i/batch_size) % 10 == 0) {
+        net.check_histogram();
+        // TODO check saturation, but on all nodes, not just weights
+      }
 
       // update & print stats
       for(auto c: corrects) { total_correct += c; }
       for(auto l: losses) { total_loss += l; }
 
-      auto current_acc = total_correct / (double)i;
-      auto current_loss = total_loss / i;
+      auto current_acc = total_correct / ((double)i + batch_size);
+      auto current_loss = total_loss / (i+batch_size);
 
       cout 
-        << "smploss = " << setw(10) << losses[0] 
-        << ", avgloss = " << setw(10) << current_loss
-        << ", acc = " << setw(10) << current_acc
-        << ", sample " << setw(5) << i << "/60000" 
+        << "[TRAIN] smploss = " << setw(12) << losses[0] 
+        << ", avgloss = "       << setw(12) << current_loss
+        << ", acc = "           << setw(12) << current_acc
+        << ", sample "          << setw(5)  << i << "/" << ptrain->size()
         << endl;
+
     }
+
+    total_correct = 0;
+    total_loss = 0.0;
+    cout << "[TEST] epoch " << epoch << endl;
+    for (auto i = 0; i < ptest->size(); i += batch_size) {
+      std::vector<std::thread> threads;
+      for(auto j = 0; j < batch_size && i + j < ptrain->size(); ++j) {
+        threads.emplace_back([&](auto idx){
+          run(ptest->imgs[idx], ptrain->labels[idx], losses[idx - i], corrects[idx - i], false);
+        }, i+j);
+      }
+      for(auto &t: threads) {
+        t.join();
+      }
+      // update & print stats
+      for(auto c: corrects) { total_correct += c; }
+      for(auto l: losses) { total_loss += l; }
+    }
+    cout 
+      << "[TEST] avgloss = " << setw(12) << total_loss / (double)ptest->size()
+      << ", acc = "          << setw(12) << total_correct / (double)ptest->size()
+      << endl;
   }
 }
 
@@ -125,7 +213,6 @@ int main(int argc, char* argv[]) {
   if(type == "q8") train<qnum8_t>();
   else if(type == "q16") train<qnum16_t>();
   else if (type == "q32") train<qnum32_t>();
-  else if (type == "q64") train<qnum64_t>();
   else if (type == "f32") train<float>();
   else if (type == "f64") train<double>();
   else {

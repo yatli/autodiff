@@ -4,20 +4,22 @@ void sanity_check() {
   debug_dump(std::numeric_limits<int32_t>::digits);
   debug_dump(qnum::qnum32_t::T_max());
   debug_dump(qnum::qnum32_t::ext_bits());
-  debug_dump(qnum::qnum32_t::ext_max());
+  debug_dump(qnum::qnum32_t::joint_bits());
   debug_dump(qnum::qnum32_t::frac_bits());
+  debug_dump(qnum::qnum32_t::ext_max());
   debug_dump(qnum::qnum32_t::frac_max());
+  debug_dump(qnum::qnum32_t::K());
 
-  debug_dump(qnum32_t(0.1));
-  debug_dump(qnum32_t(0.1).prev());
-  debug_dump(qnum32_t(0.1).next());
-  debug_dump(qnum32_t(0.01));
-  debug_dump(qnum32_t(0.001));
-  debug_dump(qnum32_t(0.0001));
-  debug_dump(qnum32_t(0.00001));
+  //debug_dump(qnum32_t(0.1));
+  //debug_dump(qnum32_t(0.1).prev());
+  //debug_dump(qnum32_t(0.1).next());
+  //debug_dump(qnum32_t(0.01));
+  //debug_dump(qnum32_t(0.001));
+  //debug_dump(qnum32_t(0.0001));
+  //debug_dump(qnum32_t(0.00001));
 
-  debug_dump(qnum32_t(0.12) + qnum32_t(0.3456));
-  debug_dump(qnum32_t(-0.151248) * qnum32_t(2.4));
+  //debug_dump(qnum32_t(0.12) + qnum32_t(0.3456));
+  //debug_dump(qnum32_t(-0.151248) * qnum32_t(2.4));
 
   //for (qnum8_t i = -1.0; i < 0.99; i = i.next()) {
   //  debug_dump(i);
@@ -74,12 +76,12 @@ int main(int argc, char** argv) {
   srand(time(nullptr));
 
   run(sanity_check);
-  run(vector_check);
-  run(autodiff_check<qnum64_t>);
-  run(autodiff_check<qnum32_t>);
-  run(autodiff_check<qnum16_t>);
-  run(autodiff_check<double>);
-  run(autodiff_check<float>);
+  //run(vector_check);
+  //run(autodiff_check<qnum64_t>);
+  //run(autodiff_check<qnum32_t>);
+  //run(autodiff_check<qnum16_t>);
+  //run(autodiff_check<double>);
+  //run(autodiff_check<float>);
 
   return 0;
 }

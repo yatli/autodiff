@@ -1016,7 +1016,9 @@ struct LogExpr : UnaryExpr<T>
 
     virtual void propagate_step() 
     {
-      x->grad += this->grad / x->val;
+      if (x->val != 0) {
+        x->grad += this->grad / x->val;
+      }
     }
 
     virtual void propagate(const T& wprime)
@@ -1246,7 +1248,8 @@ struct SigmoidExpr : UnaryExpr<T>
     virtual void propagate_step() 
     {
       auto aux = std::exp(x->val);
-      x->grad += this->grad * aux / (aux + T(1.0)) / (aux + T(1.0));
+      auto aux2 = aux + T(1.0);
+      x->grad += this->grad * aux / (aux2 * aux2);
     }
 
     virtual void propagate(const T& wprime)

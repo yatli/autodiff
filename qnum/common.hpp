@@ -130,7 +130,7 @@ int argmax(const VectorXtvar<T>& x) {
   double maxval = x[0].expr->val;
   for (auto i = 1; i < n; ++i) {
     auto xi = static_cast<double>(x[i].expr->val);
-    if (xi > maxval) {
+    if (xi >= maxval) {
       maxval = xi;
       ret = i;
     }

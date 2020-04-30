@@ -14,6 +14,54 @@ struct mlp_t {
     w1(mat::Random(nhidden, ninput + 1) * 0.05),
     w2(mat::Random(noutput, nhidden + 1) * 0.05) { }
 
+  void save(const char* name) {
+    FILE* fp = fopen(name, "wb");
+
+    std::vector<T> v1(sz_hidden * (sz_input+1));
+    std::vector<T> v2(sz_output * (sz_hidden + 1));
+
+    int idx = 0;
+    for(int r = 0; r < sz_hidden; ++r) {
+      for(int c = 0; c < sz_input + 1; ++c) {
+        v1[idx++] = w1(r, c).expr->val;
+      }
+    }
+    idx = 0;
+    for(int r = 0; r < sz_output; ++r) {
+      for(int c = 0; c < sz_hidden + 1; ++c) {
+        v2[idx++] = w2(r, c).expr->val;
+      }
+    }
+    fwrite(v1.data(), v1.size() * sizeof(T), 1, fp);
+    fwrite(v2.data(), v2.size() * sizeof(T), 1, fp);
+
+    fclose(fp);
+  }
+
+  void load(const char* name) {
+    FILE* fp = fopen(name, "rb");
+
+    std::vector<T> v1(sz_hidden * (sz_input+1));
+    std::vector<T> v2(sz_output * (sz_hidden + 1));
+
+    fwrite(v1.data(), v1.size() * sizeof(T), 1, fp);
+    fwrite(v2.data(), v2.size() * sizeof(T), 1, fp);
+    fclose(fp);
+
+    int idx = 0;
+    for(int r = 0; r < sz_hidden; ++r) {
+      for(int c = 0; c < sz_input + 1; ++c) {
+        w1(r, c) = v1[idx++];
+      }
+    }
+    idx = 0;
+    for(int r = 0; r < sz_output; ++r) {
+      for(int c = 0; c < sz_hidden + 1; ++c) {
+        w2(r, c) = v2[idx++];
+      }
+    }
+  }
+
   vec forward(const vec& x) {
     auto bx = withb(x);
     auto hx = withb(fc_layer(bx, w1, act_relu));
@@ -44,16 +92,16 @@ struct mlp_t {
   }
 
   void learn(const T& rate) {
-    for (int j = 0; j < sz_hidden; ++j) {
-      for (int i = 0; i < sz_input; ++i) {
-        auto& e = w1(j, i + 1);
+    for (int r = 0; r < sz_hidden; ++r) {
+      for (int c = 0; c < sz_input + 1; ++c) {
+        auto& e = w1(r, c);
         e = (e - e.grad() * rate)->val;
         e.seed();
       }
     }
-    for (int j = 0; j < sz_output; ++j) {
-      for (int i = 0; i < sz_hidden; ++i) {
-        auto& e = w2(j, i + 1);
+    for (int r = 0; r < sz_output; ++r) {
+      for (int c = 0; c < sz_hidden + 1; ++c) {
+        auto& e = w2(r, c);
         e = (e - e.grad() * rate)->val;
         e.seed();
       }
@@ -72,9 +120,9 @@ struct mlp_t {
     }
     bucket_bounds[nhist/2] = 0;
 
-    for (int j = 0; j < sz_hidden; ++j) {
-      for (int i = 0; i < sz_input; ++i) {
-        auto& e = w1(j, i + 1);
+    for (int r = 0; r < sz_hidden; ++r) {
+      for (int c = 0; c < sz_input; ++c) {
+        auto& e = w1(r, c+1);
         for(int k=0;k<nhist;++k) {
           if (e.expr->val < bucket_bounds[k]) {
             histogram[k]++;
@@ -83,9 +131,9 @@ struct mlp_t {
         }
       }
     }
-    for (int j = 0; j < sz_output; ++j) {
-      for (int i = 0; i < sz_hidden; ++i) {
-        auto& e = w2(j, i + 1);
+    for (int r = 0; r < sz_output; ++r) {
+      for (int c = 0; c < sz_hidden; ++c) {
+        auto& e = w2(r, c + 1);
         for(int k=0;k<nhist;++k) {
           if (e.expr->val < bucket_bounds[k]) {
             histogram[k]++;
@@ -130,7 +178,7 @@ struct mlp_t {
   }
 };
 
-template<typename T> void train(double lr, int nhidden) {
+template<typename T> void train(double lr, int nhidden, const string& type) {
   cout << "loading data..." << endl;
   auto ptrain = load_train<T>();
   auto ptest = load_test<T>();
@@ -162,6 +210,13 @@ template<typename T> void train(double lr, int nhidden) {
     auto smpidx = ptrain->shuffle();
 
     for (auto i = 0; i < ptrain->size(); i += batch_size) {
+
+      if (i % 10000 == 0) {
+        char buf[256];
+        sprintf(buf, "%s-h%d-lr%f-epoch-%d-step-%d.dmp", type.data(), nhidden, lr, epoch, i);
+        net.save(buf);
+      }
+
       std::vector<std::thread> threads;
       for(auto j = 0; j < batch_size && i + j < ptrain->size(); ++j) {
         threads.emplace_back([&](auto idx){
@@ -268,11 +323,11 @@ int main(int argc, char* argv[]) {
   double lr = atof(argv[3]);
   int nhidden = atoi(argv[4]);
 
-  if(type == "q8") train_wrap<int8_t>(E, lr, nhidden);
-  else if(type == "q16") train_wrap<int16_t>(E, lr, nhidden);
-  else if (type == "q32") train_wrap<int32_t>(E, lr, nhidden);
-  else if (type == "f32") train<float>(lr, nhidden);
-  else if (type == "f64") train<double>(lr, nhidden);
+  if(type == "q8") train_wrap<int8_t>(E, lr, nhidden, type);
+  else if(type == "q16") train_wrap<int16_t>(E, lr, nhidden, type);
+  else if (type == "q32") train_wrap<int32_t>(E, lr, nhidden, type);
+  else if (type == "f32") train<float>(lr, nhidden, type);
+  else if (type == "f64") train<double>(lr, nhidden, type);
   else {
     cout << "unknown data type " << type << "." << endl;
   }

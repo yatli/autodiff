@@ -59,21 +59,9 @@ template<typename T> void train(double lr, int nhidden, const string& type, cons
 
       // update & print stats
       auto batch_loss = 0.0;
-      for(auto c: corrects) { total_correct += c; }
-      for(auto l: losses) { total_loss += l; batch_loss += l; }
-
-      auto current_acc = total_correct / ((double)i + batch_size);
-      auto current_loss = total_loss / (i+batch_size);
+      for(auto l: losses) { batch_loss += l; }
       batch_loss /= batch_size;
-
-      cout 
-        << "[TRAIN] batchloss = " << setw(12) << batch_loss
-        << ", avgloss = "       << setw(12) << current_loss
-        << ", acc = "           << setw(12) << current_acc
-        << ", sample "          << setw(5)  << i << "/" << ptrain->size()
-        << endl;
-
-      if (!std::isnormal(current_loss) || current_loss > 10.0) {
+      if (!std::isnormal(batch_loss) || batch_loss > 10.0) {
         cout << "[DEBUG] abnormal loss detected. dump and ignore now." << endl;
         cout << "[DEBUG] current batch is: ";
         for(auto j = 0; j < batch_size && i + j < ptrain->size(); ++j) {
@@ -85,6 +73,19 @@ template<typename T> void train(double lr, int nhidden, const string& type, cons
         net.save(buf);
         continue;
       }
+
+      for(auto c: corrects) { total_correct += c; }
+      for(auto l: losses) { total_loss += l; }
+
+      auto current_acc = total_correct / ((double)i + batch_size);
+      auto current_loss = total_loss / (i+batch_size);
+
+      cout 
+        << "[TRAIN] batchloss = " << setw(12) << batch_loss
+        << ", avgloss = "       << setw(12) << current_loss
+        << ", acc = "           << setw(12) << current_acc
+        << ", sample "          << setw(5)  << i << "/" << ptrain->size()
+        << endl;
 
       net.learn(T(lr));
 

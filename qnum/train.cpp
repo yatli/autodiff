@@ -44,8 +44,8 @@ struct mlp_t {
     std::vector<T> v1(sz_hidden * (sz_input+1));
     std::vector<T> v2(sz_output * (sz_hidden + 1));
 
-    fwrite(v1.data(), v1.size() * sizeof(T), 1, fp);
-    fwrite(v2.data(), v2.size() * sizeof(T), 1, fp);
+    fread(v1.data(), v1.size() * sizeof(T), 1, fp);
+    fread(v2.data(), v2.size() * sizeof(T), 1, fp);
     fclose(fp);
 
     int idx = 0;
@@ -178,12 +178,17 @@ struct mlp_t {
   }
 };
 
-template<typename T> void train(double lr, int nhidden, const string& type) {
+template<typename T> void train(double lr, int nhidden, const string& type, const char* checkpoint) {
   cout << "loading data..." << endl;
   auto ptrain = load_train<T>();
   auto ptest = load_test<T>();
   cout << "initializing network..." << endl;
   mlp_t<T> net(28*28, nhidden, 10);
+
+  if(checkpoint != nullptr) {
+    cout << "[DEBUG] Loading checkpoint from " << checkpoint << endl;
+    net.load(checkpoint);
+  }
 
   for (int epoch = 0;; ++epoch) {
     cout << "[TRAIN] epoch " << epoch << endl;
@@ -322,12 +327,16 @@ int main(int argc, char* argv[]) {
   int E = atoi(argv[2]);
   double lr = atof(argv[3]);
   int nhidden = atoi(argv[4]);
+  char* chkpoint = nullptr;
+  if (argc == 6) {
+    chkpoint = argv[5];
+  }
 
-  if(type == "q8") train_wrap<int8_t>(E, lr, nhidden, type);
-  else if(type == "q16") train_wrap<int16_t>(E, lr, nhidden, type);
-  else if (type == "q32") train_wrap<int32_t>(E, lr, nhidden, type);
-  else if (type == "f32") train<float>(lr, nhidden, type);
-  else if (type == "f64") train<double>(lr, nhidden, type);
+  if(type == "q8") train_wrap<int8_t>(E, lr, nhidden, type, chkpoint);
+  else if(type == "q16") train_wrap<int16_t>(E, lr, nhidden, type, chkpoint);
+  else if (type == "q32") train_wrap<int32_t>(E, lr, nhidden, type, chkpoint);
+  else if (type == "f32") train<float>(lr, nhidden, type, chkpoint);
+  else if (type == "f64") train<double>(lr, nhidden, type, chkpoint);
   else {
     cout << "unknown data type " << type << "." << endl;
   }

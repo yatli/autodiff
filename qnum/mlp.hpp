@@ -69,15 +69,15 @@ struct mlp_t {
   }
 
   vec forward_debug(const vec& x) {
-    auto bx = withb(x);
+    VectorXtvar<T> bx = withb(x);
     debug_dump(bx);
-    auto p1 = w1 * bx;
+    VectorXtvar<T> p1 = w1 * bx;
     debug_dump(p1);
-    auto hx = withb(act_relu(p1));
+    VectorXtvar<T> hx = withb(act_relu(p1));
     debug_dump(hx);
-    auto p2 = w2 * hx;
+    VectorXtvar<T> p2 = w2 * hx;
     debug_dump(p2);
-    auto ox = act_softmax(p2);
+    VectorXtvar<T> ox = act_softmax(p2);
     debug_dump(ox);
     return ox;
   }

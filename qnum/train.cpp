@@ -256,6 +256,11 @@ template<typename T> void train(double lr, int nhidden, const string& type, cons
 
       if (!std::isnormal(current_loss)) {
         cout << "[DEBUG] abnormal loss detected. dump and exit now." << endl;
+        cout << "[DEBUG] current batch is: ";
+        for(auto j = 0; j < batch_size && i + j < ptrain->size(); ++j) {
+          cout << smpidx[i+j] << " ";
+        }
+        cout << endl;
         char buf[256];
         sprintf(buf, "%s-h%d-lr%f-epoch-%d-step-%d.dmp", type.data(), nhidden, lr, epoch, i);
         net.save(buf);

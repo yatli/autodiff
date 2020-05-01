@@ -239,14 +239,16 @@ template<typename T> void train(double lr, int nhidden, const string& type, cons
       }
 
       // update & print stats
+      auto batch_loss = 0.0;
       for(auto c: corrects) { total_correct += c; }
-      for(auto l: losses) { total_loss += l; }
+      for(auto l: losses) { total_loss += l; batch_loss += l; }
 
       auto current_acc = total_correct / ((double)i + batch_size);
       auto current_loss = total_loss / (i+batch_size);
+      batch_loss /= batch_size;
 
       cout 
-        << "[TRAIN] smploss = " << setw(12) << losses[0] 
+        << "[TRAIN] batchloss = " << setw(12) << batch_loss
         << ", avgloss = "       << setw(12) << current_loss
         << ", acc = "           << setw(12) << current_acc
         << ", sample "          << setw(5)  << i << "/" << ptrain->size()

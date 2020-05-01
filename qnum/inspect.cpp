@@ -14,9 +14,23 @@ template<typename T> void train(double lr, int nhidden, const string& type, cons
     net.load(checkpoint);
   }
 
-  net.check_histogram();
-  net.check_saturation();
-  net.dump_weights();
+  //net.check_histogram();
+  //net.check_saturation();
+  //net.dump_weights();
+  int smpidx;
+  while(true) {
+    scanf("%d", &smpidx);
+    if(smpidx < 0 || smpidx >= ptrain->size()) {
+      break;
+    }
+    auto label = ptrain->labels[smpidx];
+    auto img = ptrain->imgs[smpidx];
+    auto label_predict = net.forward(img);
+    auto loss = loss_crossent(label, label_predict);
+    cout << "label: " << label << endl;
+    cout << "prediction: " << label_predict << endl;
+    cout << "loss: " << loss << endl;
+  }
 }
 
 template<typename T, typename ... Args> void train_wrap(int E, Args... args)

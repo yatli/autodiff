@@ -25,7 +25,7 @@ template<typename T> void train(double lr, int nhidden, const string& type, cons
     }
     auto label = ptrain->labels[smpidx];
     auto img = ptrain->imgs[smpidx];
-    auto label_predict = net.forward(img);
+    auto label_predict = net.forward_debug(img);
     auto loss = loss_crossent(label, label_predict);
     cout << "label: " << label << endl;
     cout << "prediction: " << label_predict << endl;

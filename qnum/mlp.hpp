@@ -68,6 +68,20 @@ struct mlp_t {
     return ox;
   }
 
+  vec forward_debug(const vec& x) {
+    auto bx = withb(x);
+    debug_dump(bx);
+    auto p1 = w1 * bx;
+    debug_dump(p1);
+    auto hx = withb(act_relu(p1));
+    debug_dump(hx);
+    auto p2 = w2 * hx;
+    debug_dump(p2);
+    auto ox = act_softmax(p2);
+    debug_dump(ox);
+    return ox;
+  }
+
   void backward(const Variable<T>& loss) {
     // first check for poisonous loss values
     if constexpr(!std::is_same_v<T, float> && !std::is_same_v<T, double>) {

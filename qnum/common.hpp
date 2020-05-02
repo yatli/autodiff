@@ -61,8 +61,14 @@ VectorXtvar<T> act_softmax(const VectorXtvar<T>& x) {
   const auto n = x.size();
   VectorXtvar<T> ret(n);
   Variable<T> sum = 0;
+  auto maxi = 0;
   for (auto i = 0; i < n; ++i) {
-    ret[i] = exp(x[i]);
+    if(x[i].expr->val > x[maxi].expr->val) {
+      maxi = i;
+    }
+  }
+  for (auto i = 0; i < n; ++i) {
+    ret[i] = exp(x[i] - x[maxi]);
     sum += ret[i];
   }
   if (sum == 0) {

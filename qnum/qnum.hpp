@@ -57,6 +57,7 @@ public:
       val = static_cast<T>(v / (g_upper) * T_max());
     } else {
       val = static_cast<T>(v / (upper) * T_max());
+      growth = false;
     }
 
   }
@@ -99,10 +100,10 @@ public:
     T r = rhs.val;
     bool g = growth || rhs.growth;
     if (g && !rhs.growth) {
-      grow(l);
+      l >>= g_shift();
     } 
     if (g && !growth) {
-      grow(r);
+      r >>= g_shift();
     }
     return std::make_tuple(l, r, g);
   }
@@ -111,6 +112,7 @@ public:
     qspace_number_t<T, E> ret;
     auto [l, r, g] = align(rhs);
     T2x tmp = T2x(l) + T2x(r);
+    g = grow(tmp, g);
     ret.val = saturate(tmp);
     ret.growth = g;
     ret.shrink();
@@ -121,6 +123,7 @@ public:
     qspace_number_t<T, E> ret;
     auto [l, r, g] = align(rhs);
     T2x tmp = static_cast<T2x>(l) - static_cast<T2x>(r);
+    g = grow(tmp, g);
     ret.val = saturate(tmp);
     ret.growth = g;
     ret.shrink();
@@ -138,8 +141,10 @@ public:
     }
     else { 
       tmp += K(); 
-      ret.val = saturate(tmp >> frac_bits());
-      ret.growth = false;
+      tmp >>= frac_bits();
+      g = grow(tmp, false);
+      ret.val = saturate(tmp);
+      ret.growth = g;
     }
     ret.shrink();
     return ret;
@@ -161,7 +166,9 @@ public:
     } else {
       tmp -= r/ 2;
     }
-    ret.val = static_cast<T>(tmp / r);
+    tmp /= r;
+    g = grow(tmp, g);
+    ret.val = saturate(tmp);
     ret.growth = g;
     ret.shrink();
     return ret;
@@ -230,15 +237,22 @@ public:
     return ret;
   }
 
-  static void grow(T& val) {
-    val >>= g_shift();
+  static bool grow(T2x& v, bool g) {
+    if (g) { 
+      return true;
+    } else if (v > T_max() || v < T_min()) {
+      v >>= g_shift();
+      return true;
+    } else {
+      return false;
+    }
   }
 
   void shrink() {
     if (!growth) {
       return;
     }
-    if (g_threshold_min() < val < g_threshold_max()) {
+    if (g_threshold_min() < val && val < g_threshold_max()) {
       val <<= g_shift();
     }
   }

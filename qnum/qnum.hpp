@@ -100,10 +100,10 @@ public:
     T r = rhs.val;
     bool g = growth || rhs.growth;
     if (g && !rhs.growth) {
-      l >>= g_shift();
+      r >>= g_shift();
     } 
     if (g && !growth) {
-      r >>= g_shift();
+      l >>= g_shift();
     }
     return std::make_tuple(l, r, g);
   }
@@ -254,6 +254,7 @@ public:
     }
     if (g_threshold_min() < val && val < g_threshold_max()) {
       val <<= g_shift();
+      growth = false;
     }
   }
 

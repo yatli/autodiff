@@ -1,15 +1,6 @@
 #include "common.hpp"
 
-void sanity_check() {
-  debug_dump(std::numeric_limits<int16_t>::digits);
-  debug_dump(qnum::qnum16_t<>::T_max());
-  debug_dump(qnum::qnum16_t<>::ext_bits());
-  debug_dump(qnum::qnum16_t<>::joint_bits());
-  debug_dump(qnum::qnum16_t<>::frac_bits());
-  debug_dump(qnum::qnum16_t<>::ext_max());
-  debug_dump(qnum::qnum16_t<>::frac_max());
-  debug_dump(qnum::qnum16_t<>::K());
-
+void growth_mul_check() {
   qnum::qnum16_t<> v = 0.1;
   debug_dump(v);
   debug_dump(v.growth);
@@ -70,7 +61,122 @@ void sanity_check() {
   debug_dump(v);
   debug_dump(v.growth);
   debug_dump(v.val);
+}
 
+void growth_add_check() {
+  qnum::qnum16_t<> v = 0.1;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+  v += 1.25;
+  debug_dump(v);
+  debug_dump(v.growth);
+  debug_dump(v.val);
+
+
+}
+
+void sanity_check() {
+  debug_dump(std::numeric_limits<int16_t>::digits);
+  debug_dump(qnum::qnum16_t<>::T_max());
+  debug_dump(qnum::qnum16_t<>::ext_bits());
+  debug_dump(qnum::qnum16_t<>::joint_bits());
+  debug_dump(qnum::qnum16_t<>::frac_bits());
+  debug_dump(qnum::qnum16_t<>::ext_max());
+  debug_dump(qnum::qnum16_t<>::frac_max());
+  debug_dump(qnum::qnum16_t<>::K());
 
   //debug_dump(qnum32_t<>(0.1));
   //debug_dump(qnum32_t<>(0.1).prev());
@@ -138,6 +244,8 @@ int main(int argc, char** argv) {
   srand(time(nullptr));
 
   run(sanity_check);
+  run(growth_add_check);
+  run(growth_mul_check);
   //run(vector_check);
   //run(autodiff_check<qnum64_t<>>);
   //run(autodiff_check<qnum32_t<>>);

@@ -30,10 +30,10 @@ namespace Eigen
       RequireInitialization = 1,
     };
 
-    static inline Real epsilon() { return Real::from_literal(1); }
+    static inline Real epsilon() { return Real::from_literal(1, false); }
     static inline Real dummy_precision() { Real v; return v; }
-    static inline Real highest() { return Real::from_literal(Real::T_max()); }
-    static inline Real lowest() { return Real::from_literal(Real::T_min()); }
+    static inline Real highest() { return Real::from_literal(Real::T_max(), true); }
+    static inline Real lowest() { return Real::from_literal(Real::T_min(), true); }
     static inline int digits10() { return std::numeric_limits<T>::digits10; }
   };
 
@@ -56,11 +56,11 @@ namespace Eigen
           typename _Q::Tu xu = static_cast<typename _Q::Tu>(x.val);
           typename _Q::Tu yu = static_cast<typename _Q::Tu>(y.val);
           auto ru = static_cast<typename _Q::Tu>(rn) % yu - xu;
-          return _Q::from_literal(static_cast<T>(ru));
+          return _Q::from_literal(static_cast<T>(ru), false);
         }
         static inline _Q run() {
           int rn = std::rand() * RAND_MAX + std::rand();
-          return _Q::from_literal(static_cast<T>(rn) >> _Q::ext_bits());
+          return _Q::from_literal(static_cast<T>(rn) >> _Q::ext_bits(), false);
         }
       };
 

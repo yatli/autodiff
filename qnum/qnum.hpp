@@ -3,6 +3,7 @@
 #include <cinttypes>
 #include <limits>
 #include <iostream>
+#include <tuple>
 #include <cmath>
 
 namespace qnum {
@@ -25,7 +26,8 @@ template <> struct number_traits<int64_t> {
   typedef uint64_t Tu;
 };
 
-/// A Q-Space number consists of 3 parts:
+/// A Q-Space number consists of 4 parts:
+/// - g: the growth bit (external, not encoded in the backing integer)
 /// - s: the sign bit
 /// - e: the extension component, unsigned integer
 /// - d: the significant compoment, unsigned integer
@@ -39,32 +41,49 @@ struct qspace_number_t
   using Tu = typename number_traits<T>::Tu;
   using Ts = T;
   T val;
+  bool growth;
 
 public:
 
-  qspace_number_t(): val(0){}
+  qspace_number_t(): val(0), growth(false){}
   qspace_number_t(double v) {
     auto constexpr upper = 1 + ext_max();
-    if (v > upper) v = upper;
-    if (v < -upper) v = -upper;
-    val = static_cast<T>(v / (upper) * T_max());
+    auto constexpr g_upper = 1 + g_ext_max();
+
+    if (v > upper || v < -upper) {
+      growth = true;
+      if (v > g_upper) v = g_upper;
+      if (v < -g_upper) v = -g_upper;
+      val = static_cast<T>(v / (g_upper) * T_max());
+    } else {
+      val = static_cast<T>(v / (upper) * T_max());
+    }
+
   }
   qspace_number_t(const int& v) : qspace_number_t<T, E>(static_cast<double>(v)) { }
 
+  // TODO handle growth change
   qspace_number_t next() const {
     qspace_number_t ret;
     ret.val = val + 1;
+    ret.growth = growth;
     return ret;
   }
 
+  // TODO handle growth change
   qspace_number_t prev() const {
     qspace_number_t ret;
     ret.val = val - 1;
+    ret.growth = growth;
     return ret;
   }
 
   double to_double() const {
-    return static_cast<double>(val) / T_max() * (1+ext_max());
+    if (growth) {
+      return static_cast<double>(val) / T_max() * (1+g_ext_max());
+    } else {
+      return static_cast<double>(val) / T_max() * (1+ext_max());
+    }
   }
 
   explicit operator double() const {
@@ -72,51 +91,90 @@ public:
   }
 
   qspace_number_t<T, E> neg() const {
-    return from_literal(-val);
+    return from_literal(-val, growth);
+  }
+
+  std::tuple<T, T, bool> align(const qspace_number_t<T, E>& rhs) const {
+    T l = val;
+    T r = rhs.val;
+    bool g = growth || rhs.growth;
+    if (g && !rhs.growth) {
+      grow(l);
+    } 
+    if (g && !growth) {
+      grow(r);
+    }
+    return std::make_tuple(l, r, g);
   }
 
   qspace_number_t<T, E> add(const qspace_number_t<T, E>& rhs) const {
     qspace_number_t<T, E> ret;
-    T2x tmp = T2x(val) + T2x(rhs.val);
+    auto [l, r, g] = align(rhs);
+    T2x tmp = T2x(l) + T2x(r);
     ret.val = saturate(tmp);
+    ret.growth = g;
+    ret.shrink();
     return ret;
   }
 
   qspace_number_t<T, E> sub(const qspace_number_t<T, E>& rhs) const {
     qspace_number_t<T, E> ret;
-    T2x tmp = T2x(val) - T2x(rhs.val);
+    auto [l, r, g] = align(rhs);
+    T2x tmp = static_cast<T2x>(l) - static_cast<T2x>(r);
     ret.val = saturate(tmp);
+    ret.growth = g;
+    ret.shrink();
     return ret;
   }
 
   qspace_number_t<T, E> mul(const qspace_number_t<T, E>& rhs) const {
     qspace_number_t<T, E> ret;
-    T2x tmp = static_cast<T2x>(val) * static_cast<T2x>(rhs.val);
-    tmp += K();
-    ret.val = saturate(tmp >> frac_bits());
+    auto [l, r, g] = align(rhs);
+    T2x tmp = static_cast<T2x>(l) * static_cast<T2x>(r);
+    if (g) { 
+      tmp += g_K(); 
+      ret.val = saturate(tmp >> g_frac_bits());
+      ret.growth = true;
+    }
+    else { 
+      tmp += K(); 
+      ret.val = saturate(tmp >> frac_bits());
+      ret.growth = false;
+    }
+    ret.shrink();
     return ret;
   }
 
   qspace_number_t<T, E> div(const qspace_number_t<T, E>& rhs) const {
     qspace_number_t<T, E> ret;
+    auto [l, r, g] = align(rhs);
     // pre-scaling up
-    T2x tmp = static_cast<T2x>(val) << frac_bits();
-    // rounding
-    if ((tmp >= 0 && rhs.val >= 0) || (tmp < 0 && rhs.val < 0)) {
-      tmp += rhs.val / 2;
+    T2x tmp = static_cast<T2x>(l);
+    if (g) {
+      tmp <<= g_frac_bits();
     } else {
-      tmp -= rhs.val / 2;
+      tmp <<= frac_bits();
     }
-    ret.val = static_cast<T>(tmp / rhs.val);
+    // rounding
+    if ((tmp >= 0 && r >= 0) || (tmp < 0 && r < 0)) {
+      tmp += r / 2;
+    } else {
+      tmp -= r/ 2;
+    }
+    ret.val = static_cast<T>(tmp / r);
+    ret.growth = g;
+    ret.shrink();
     return ret;
   }
 
   bool operator == (const qspace_number_t<T, E>& rhs) const {
-    return val == rhs.val;
+    auto [l, r, _] = align(rhs);
+    return l == r;
   }
 
   bool operator < (const qspace_number_t<T, E>& rhs) const {
-    return val < rhs.val;
+    auto [l, r, _] = align(rhs);
+    return l < r;
   }
 
   bool operator != (const qspace_number_t<T, E>& rhs) const {
@@ -165,20 +223,47 @@ public:
     return static_cast<T>(v);
   }
 
-  static qspace_number_t<T, E> from_literal(const T& t) {
+  static qspace_number_t<T, E> from_literal(const T& t, bool growth) {
     qspace_number_t<T, E> ret;
     ret.val = t;
+    ret.growth = growth;
     return ret;
   }
 
+  static void grow(T& val) {
+    val >>= g_shift();
+  }
+
+  void shrink() {
+    if (!growth) {
+      return;
+    }
+    if (g_threshold_min() < val < g_threshold_max()) {
+      val <<= g_shift();
+    }
+  }
+
+  // common constants
   static constexpr T T_max() { return std::numeric_limits<T>::max(); }
   static constexpr T T_min() { return std::numeric_limits<T>::min(); }
-  static constexpr int ext_bits() { return E; }
   static constexpr int joint_bits() { return std::numeric_limits<T>::digits; }
+
+  // normal mode constants
+  static constexpr int ext_bits() { return E; }
   static constexpr int frac_bits() { return joint_bits() - ext_bits(); }
   static constexpr T ext_max() { return (1 << ext_bits()) - 1; }
   static constexpr T frac_max() { return (1 << frac_bits()) - 1; }
   static constexpr int K() { return 1 << (frac_bits() - 1); } // for rounding
+
+  // growth mode constants
+  static constexpr int g_shift() { return 4; }
+  static constexpr int g_ext_bits() { return E + g_shift(); }
+  static constexpr int g_frac_bits() { return joint_bits() - g_ext_bits(); }
+  static constexpr T g_ext_max() { return (1 << g_ext_bits()) - 1; }
+  static constexpr T g_frac_max() { return (1 << g_frac_bits()) - 1; }
+  static constexpr int g_K() { return 1 << (g_frac_bits() - 1); }
+  static constexpr T g_threshold_max() { return T_max() >> g_shift(); }
+  static constexpr T g_threshold_min() { return T_min() >> g_shift(); }
 };
 
 template <typename T, int E>
@@ -293,7 +378,7 @@ namespace std
   {
     auto val = q.val;
     if (val < 0) val = -val;
-    return qspace_number_t<T, E>::from_literal(val);
+    return qspace_number_t<T, E>::from_literal(val, q.growth);
   }
 
   template<typename T, int E>
@@ -301,7 +386,7 @@ namespace std
   {
     auto val = a.val;
     if (b.val < 0) val = -val;
-    return qspace_number_t<T, E>::from_literal(val);
+    return qspace_number_t<T, E>::from_literal(val, a.growth);
   }
 
   template<typename T, int E>

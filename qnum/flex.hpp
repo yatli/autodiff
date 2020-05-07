@@ -247,6 +247,10 @@ template <uint_fast8_t exp_bits, uint_fast8_t frac_bits> struct flexfloat {
     }
 
     // Constructor from castable type
+    // Note: In the original flexfloat implementation this is a templated constructor.
+    // gcc seems to think that VectorXtvar<flex::flexfloat<E, F>> can cast to flexfloat, which
+    // fails compilation with ambiguous overload for operators (messing Eigen operators with flexfloat ones).
+    // Workaround: don't use the template. The compiler doesn't do SFINE well here.
     INLINE flexfloat (const double &w)
     {
 #ifdef FLEXFLOAT_STATS

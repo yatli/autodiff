@@ -113,5 +113,47 @@ namespace Eigen
     static inline int digits10() { return 10; } // XXX wrong
   };
 
+  namespace internal {
+    /// Partial specialization for random implementation for flexfloat.
+    /// See MathFunctions.h L535
+    template<uint8_t E, uint8_t F> struct random_impl<flexfloat<E, F>>
+      : random_default_impl
+        <
+        flexfloat<E, F>,
+        NumTraits<flexfloat<E, F>>::IsComplex,
+        NumTraits<flexfloat<E, F>>::IsInteger
+        > 
+    {
+      typedef flexfloat<E, F> _Q;
+      static inline _Q run(const _Q& x, const _Q& y) {
+        if (x > y) return x;
+        double rn = std::rand();
+        rn = rn / RAND_MAX * (y - x) + x;
+        return (_Q)rn;
+      }
+      static inline _Q run() {
+        double rn = std::rand();
+        rn = (rn / RAND_MAX) * 2.0 - 1.0;
+        return (_Q)rn;
+      }
+    };
+
+    template<uint8_t E, uint8_t F> struct random_impl<Variable<flexfloat<E, F>>>
+      : random_default_impl
+        <
+        Variable<flexfloat<E, F>>,
+        NumTraits<Variable<flexfloat<E, F>>>::IsComplex,
+        NumTraits<Variable<flexfloat<E, F>>>::IsInteger
+        > 
+    {
+      typedef flexfloat<E, F> _Q;
+      static inline Variable<_Q> run(const Variable<_Q>& x, const Variable<_Q>& y) {
+        return Variable<_Q>(random_impl<_Q>::run(x.expr->val, y.expr->val));
+      }
+      static inline Variable<_Q> run() {
+        return Variable<_Q>(random_impl<_Q>::run());
+      }
+    };
+  }
 }
 

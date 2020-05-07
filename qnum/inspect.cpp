@@ -93,6 +93,7 @@ int main(int argc, char* argv[]) {
   else if (type == "q32") train_wrap<int32_t>(E, lr, nhidden, type, chkpoint);
   else if (type == "f32") train<float>(lr, nhidden, type, chkpoint);
   else if (type == "f64") train<double>(lr, nhidden, type, chkpoint);
+  else if (type == "f16") train<flex::float16_t>(lr, nhidden, type, chkpoint);
   else {
     cout << "unknown data type " << type << "." << endl;
   }

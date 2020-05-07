@@ -43,9 +43,10 @@ struct mlp_t {
     std::vector<T> v1(sz_hidden * (sz_input+1));
     std::vector<T> v2(sz_output * (sz_hidden + 1));
 
-    fread(v1.data(), v1.size() * sizeof(T), 1, fp);
-    fread(v2.data(), v2.size() * sizeof(T), 1, fp);
-    fclose(fp);
+    int _;
+    _ = fread(v1.data(), v1.size() * sizeof(T), 1, fp);
+    _ = fread(v2.data(), v2.size() * sizeof(T), 1, fp);
+    _ = fclose(fp);
 
     int idx = 0;
     for(int r = 0; r < sz_hidden; ++r) {
@@ -82,13 +83,13 @@ struct mlp_t {
     return ox;
   }
 
-  void backward(const Variable<T>& loss) {
+  void backward(const autodiff::reverse::Variable<T>& loss) {
     // first check for poisonous loss values
-    if constexpr(!std::is_same_v<T, float> && !std::is_same_v<T, double>) {
+    if constexpr(is_qnum<T>::value) {
       if(loss.expr->val.saturated()) {
         return;
       }
-    } else {
+    } else if constexpr(is_std_float<T>::value) {
       if(!std::isnormal(loss.expr->val)) {
         return;
       }
@@ -155,11 +156,11 @@ struct mlp_t {
         }
       }
     }
-    cout << "[DEBUG] Histogram :" ;
+    std::cout << "[DEBUG] Histogram :" ;
     for(int i=0;i<nhist;++i) {
-      cout << " " << setw(5) << histogram[i];
+      std::cout << " " << std::setw(5) << histogram[i];
     }
-    cout << endl;
+    std::cout << std::endl;
   }
 
   void check_saturation() {
@@ -186,7 +187,7 @@ struct mlp_t {
         }
       }
 
-      cout << "[DEBUG] Saturation: " << nsat << " / " << nsat_grad << " / " << ntotal << endl;
+      std::cout << "[DEBUG] Saturation: " << nsat << " / " << nsat_grad << " / " << ntotal << std::endl;
     }
   }
 
@@ -194,13 +195,13 @@ struct mlp_t {
     for (int j = 0; j < sz_hidden; ++j) {
       for (int i = 0; i < sz_input; ++i) {
         auto& e = w1(j, i + 1);
-        cout << "[DUMP] " << e.expr->val << endl;
+        std::cout << "[DUMP] " << e.expr->val << std::endl;
       }
     }
     for (int j = 0; j < sz_output; ++j) {
       for (int i = 0; i < sz_hidden; ++i) {
         auto& e = w2(j, i + 1);
-        cout << "[DUMP] " << e.expr->val << endl;
+        std::cout << "[DUMP] " << e.expr->val << std::endl;
       }
     }
   }

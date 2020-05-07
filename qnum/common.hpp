@@ -3,19 +3,43 @@
 #include <iostream>
 #include <ctime>
 #include <chrono>
-using namespace std;
 
 #include "qnum.hpp"
+#include "flex.hpp"
 #include "eigen.hpp"
-using namespace qnum;
-using namespace Eigen;
 
 #include <autodiff/reverse.hpp>
 #include <autodiff/reverse/eigen.hpp>
-using namespace autodiff;
 
+template<typename T> struct is_qnum {
+  static constexpr bool value = false;
+};
 
-AUTODIFF_DEFINE_EIGEN_TYPEDEFS_ALL_SIZES_T(autodiff::Variable<T>, tvar);
+template<typename T, int E> struct is_qnum<qnum::qspace_number_t<T, E>> {
+  static constexpr bool value = true;
+};
+
+template<typename T> struct is_flexfloat {
+  static constexpr bool value = false;
+};
+
+template<int E, int F> struct is_flexfloat<flex::flexfloat<E, F>> {
+  static constexpr bool value = true;
+};
+
+template<typename T> struct is_std_float {
+  static constexpr bool value = false;
+};
+
+template<> struct is_std_float<float> {
+  static constexpr bool value = true;
+};
+
+template<> struct is_std_float<double> {
+  static constexpr bool value = true;
+};
+
+AUTODIFF_DEFINE_EIGEN_TYPEDEFS_ALL_SIZES_T(autodiff::reverse::Variable<T>, tvar);
 
 #define debug_dump(x) \
   do { std::cout << #x << " = " << x << std::endl; } while (false)
@@ -60,7 +84,7 @@ VectorXtvar<T> act_softmax(const VectorXtvar<T>& x) {
 
   const auto n = x.size();
   VectorXtvar<T> ret(n);
-  Variable<T> sum = 0;
+  autodiff::reverse::Variable<T> sum = 0;
   auto maxi = 0;
   for (auto i = 0; i < n; ++i) {
     if(x[i].expr->val > x[maxi].expr->val) {
@@ -81,9 +105,9 @@ VectorXtvar<T> act_softmax(const VectorXtvar<T>& x) {
 }
 
 template<typename T>
-Variable<T> loss_l2(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
+autodiff::reverse::Variable<T> loss_l2(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
   const auto n = y1.size();
-  Variable<T> sum = 0;
+  autodiff::reverse::Variable<T> sum = 0;
   for (auto i = 0; i < n; ++i) {
     sum += (y1[i] - y2[i]) * (y1[i] - y2[i]);
   }
@@ -91,10 +115,10 @@ Variable<T> loss_l2(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
 }
 
 template<typename T>
-Variable<T> loss_mse(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
+autodiff::reverse::Variable<T> loss_mse(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
   const auto n = y1.size();
-  Variable<T> norm = T(1.0 / n);
-  Variable<T> sum = 0;
+  autodiff::reverse::Variable<T> norm = T(1.0 / n);
+  autodiff::reverse::Variable<T> sum = 0;
   for (auto i = 0; i < n; ++i) {
     auto diff = y1[i] - y2[i];
     sum += diff * diff * norm;
@@ -103,9 +127,9 @@ Variable<T> loss_mse(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
 }
 
 template<typename T>
-Variable<T> loss_crossent(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
+autodiff::reverse::Variable<T> loss_crossent(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
   const auto n = y1.size();
-  Variable<T> sum = 0;
+  autodiff::reverse::Variable<T> sum = 0;
   for (auto i = 0; i < n; ++i) {
     if (y1[i].expr->val == 1) {
       sum += log(y2[i]);
@@ -115,10 +139,10 @@ Variable<T> loss_crossent(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
 }
 
 template<typename T>
-Variable<T> loss_abs(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
+autodiff::reverse::Variable<T> loss_abs(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
   const auto n = y1.size();
-  Variable<T> norm = T(1.0 / n);
-  Variable<T> sum = 0;
+  autodiff::reverse::Variable<T> norm = T(1.0 / n);
+  autodiff::reverse::Variable<T> sum = 0;
   for (auto i = 0; i < n; ++i) {
     sum += abs(y1[i] - y2[i]) * norm;
   }

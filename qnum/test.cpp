@@ -1,4 +1,5 @@
 #include "common.hpp"
+using namespace std;
 
 void growth_mul_check() {
   qnum::qnum16_t<> v = 0.1;
@@ -168,7 +169,7 @@ void growth_add_check() {
 
 }
 
-void sanity_check() {
+void q16_consts_check() {
   debug_dump(std::numeric_limits<int16_t>::digits);
   debug_dump(qnum::qnum16_t<>::T_max());
   debug_dump(qnum::qnum16_t<>::ext_bits());
@@ -177,25 +178,49 @@ void sanity_check() {
   debug_dump(qnum::qnum16_t<>::ext_max());
   debug_dump(qnum::qnum16_t<>::frac_max());
   debug_dump(qnum::qnum16_t<>::K());
+}
 
-  //debug_dump(qnum32_t<>(0.1));
-  //debug_dump(qnum32_t<>(0.1).prev());
-  //debug_dump(qnum32_t<>(0.1).next());
-  //debug_dump(qnum32_t<>(0.01));
-  //debug_dump(qnum32_t<>(0.001));
-  //debug_dump(qnum32_t<>(0.0001));
-  //debug_dump(qnum32_t<>(0.00001));
+void q32_step_check() {
+  debug_dump(qnum32_t<>(0.1));
+  debug_dump(qnum32_t<>(0.1).prev());
+  debug_dump(qnum32_t<>(0.1).next());
+  debug_dump(qnum32_t<>(0.01));
+  debug_dump(qnum32_t<>(0.001));
+  debug_dump(qnum32_t<>(0.0001));
+  debug_dump(qnum32_t<>(0.00001));
+}
 
-  //debug_dump(qnum32_t<>(0.12) + qnum32_t<>(0.3456));
-  //debug_dump(qnum32_t<>(-0.151248) * qnum32_t<>(2.4));
+void qnum_iter_check() {
+  for (qnum8_t<> i = -1.0; i < 0.99; i = i.next()) {
+    debug_dump(i);
+  }
 
-  //for (qnum8_t<> i = -1.0; i < 0.99; i = i.next()) {
-  //  debug_dump(i);
-  //}
+  for (qnum16_t<> i = -1.0; i < 0.99; i = i.next()) {
+    debug_dump(i);
+  }
+}
 
-  //for (qnum16_t<> i = -1.0; i < 0.99; i = i.next()) {
-  //  debug_dump(i);
-  //}
+void q32_add_check() {
+
+  debug_dump(qnum32_t<>(0.12) + qnum32_t<>(0.3456));
+  debug_dump(qnum32_t<>(-0.151248) * qnum32_t<>(2.4));
+
+}
+
+void flex_check() {
+  flex::float16_t a = 3.14;
+  flex::float16_t b = 2.0;
+  debug_dump(a*b);
+}
+
+void flex_autodiff_check() {
+  VectorXtvar<flex::float16_t> x(5);
+  x << 0.1, 0.2, 0.3, 0.4, 0.5 ;
+  MatrixXtvar<flex::float16_t> W = MatrixXtvar<flex::float16_t>::Random(5, 5);
+
+  debug_dump(x);
+  debug_dump(W);
+  debug_dump(W * x);
 }
 
 void vector_check() {
@@ -243,9 +268,11 @@ void autodiff_check() {
 int main(int argc, char** argv) {
   srand(time(nullptr));
 
-  run(sanity_check);
-  run(growth_add_check);
-  run(growth_mul_check);
+  run(flex_check);
+  run(flex_autodiff_check);
+  //run(q32_add_check);
+  //run(growth_add_check);
+  //run(growth_mul_check);
   //run(vector_check);
   //run(autodiff_check<qnum64_t<>>);
   //run(autodiff_check<qnum32_t<>>);

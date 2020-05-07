@@ -1,4 +1,6 @@
 #include "common.hpp"
+using namespace std;
+using namespace Eigen;
 
 int main() {
   VectorXvar v;

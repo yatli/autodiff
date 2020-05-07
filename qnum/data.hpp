@@ -26,8 +26,8 @@ template<typename T, int sz>
 struct mnist_t {
   VectorXtvar<T> imgs[sz];
   VectorXtvar<T> labels[sz];
-  vector<int> shuffle() const {
-    vector<int> idx(sz);
+  std::vector<int> shuffle() const {
+    std::vector<int> idx(sz);
     std::iota(idx.begin(), idx.end(), 0);
     std::random_device rd;
     std::mt19937 g(rd());
@@ -52,19 +52,21 @@ const mnist_t<T, sz>* load_data(const char* img_file, const char* label_file) {
 
   mnist_t<T, sz>* p = new mnist_t<T, sz>();
 
-  fread(buf, 16, 1, img_fp);
-  fread(buf, 8, 1, label_fp);
+  int _;
 
-  vector<mnist_img_t> imgs(sz);
-  vector<mnist_label_t> labels(sz);
+  _ = fread(buf, 16, 1, img_fp);
+  _ = fread(buf, 8, 1, label_fp);
 
-  fread(imgs.data(), sizeof(mnist_img_t), sz, img_fp);
-  fread(labels.data(), sizeof(mnist_label_t), sz, label_fp);
+  std::vector<mnist_img_t> imgs(sz);
+  std::vector<mnist_label_t> labels(sz);
 
-  fclose(img_fp);
-  fclose(label_fp);
+  _ = fread(imgs.data(), sizeof(mnist_img_t), sz, img_fp);
+  _ = fread(labels.data(), sizeof(mnist_label_t), sz, label_fp);
 
-  vector<int> idx(sz);
+  _ = fclose(img_fp);
+  _ = fclose(label_fp);
+
+  std::vector<int> idx(sz);
   std::iota(idx.begin(), idx.end(), 0);
   std::for_each(idx.begin(), idx.end(), [&](auto i) {
     p->imgs[i].resize(c_mnist_imgh * c_mnist_imgw);

@@ -6,6 +6,7 @@
 #include <tuple>
 #include <cmath>
 
+/// Q-Space arithmetic definition
 namespace qnum {
 
 template <typename T> struct number_traits { };
@@ -318,6 +319,7 @@ template<int E=6>using qnum32_t  = qspace_number_t<int32_t, E>;
 
 }
 
+/// std supporting types and helpers
 namespace std
 {
   using namespace qnum;
@@ -412,3 +414,4 @@ namespace std
     return a_;
   }
 }
+

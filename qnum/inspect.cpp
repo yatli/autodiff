@@ -2,6 +2,7 @@
 #include "data.hpp"
 #include "mlp.hpp"
 #include <thread>
+using namespace std;
 
 template<typename T> void train(double lr, int nhidden, const string& type, const char* checkpoint) {
   cout << "loading data..." << endl;

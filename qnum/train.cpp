@@ -3,6 +3,8 @@
 #include "mlp.hpp"
 #include <thread>
 
+using namespace std;
+
 template<typename T> void train(double lr, int nhidden, const string& type, const char* checkpoint) {
   cout << "loading data..." << endl;
   auto ptrain = load_train<T>();
@@ -61,7 +63,7 @@ template<typename T> void train(double lr, int nhidden, const string& type, cons
       auto batch_loss = 0.0;
       for(auto l: losses) { batch_loss += l; }
       batch_loss /= batch_size;
-      if (!std::isnormal(batch_loss) || batch_loss > 10.0) {
+      if (!std::isnormal(batch_loss)) {
         cout << "[DEBUG] abnormal loss detected. dump and ignore now." << endl;
         cout << "[DEBUG] current batch is: ";
         for(auto j = 0; j < batch_size && i + j < ptrain->size(); ++j) {
@@ -153,6 +155,11 @@ template<typename T, typename ... Args> void train_wrap(int E, Args... args)
 }
 
 int main(int argc, char* argv[]) {
+
+  if (argc < 5) {
+    std::cout << "usage: train num_type ext_bits lr nhidden [checkpoint_file]" << std::endl;
+  }
+
   std::string type = argv[1];
   int E = atoi(argv[2]);
   double lr = atof(argv[3]);
@@ -167,9 +174,9 @@ int main(int argc, char* argv[]) {
   else if (type == "q32") train_wrap<int32_t>(E, lr, nhidden, type, chkpoint);
   else if (type == "f32") train<float>(lr, nhidden, type, chkpoint);
   else if (type == "f64") train<double>(lr, nhidden, type, chkpoint);
-  else {
-    cout << "unknown data type " << type << "." << endl;
-  }
+  else if (type == "f16") train<float16_t>(lr, nhidden, type, chkpoint);
+  else if (type == "bf16") train<bfloat16_t>(lr, nhidden, type, chkpoint);
+  else { cout << "unknown data type " << type << "." << endl; }
 
   return 0;
 }

@@ -93,6 +93,10 @@ struct mlp_t {
       if(!std::isnormal(loss.expr->val)) {
         return;
       }
+    } else if constexpr(is_flexfloat<T>::value) {
+      if(!std::isnormal((double)loss.expr->val)) {
+        return;
+      }
     }
 
     //cout << "rewrite" << endl;

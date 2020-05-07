@@ -213,7 +213,7 @@ void flex_check() {
   debug_dump(a*b);
 }
 
-void flex_autodiff_check() {
+void flex_eigen_check() {
   VectorXtvar<flex::float16_t> x(5);
   x << 0.1, 0.2, 0.3, 0.4, 0.5 ;
   MatrixXtvar<flex::float16_t> W = MatrixXtvar<flex::float16_t>::Random(5, 5);
@@ -223,7 +223,7 @@ void flex_autodiff_check() {
   debug_dump(W * x);
 }
 
-void vector_check() {
+void q16_eigen_check() {
   VectorXtvar<qnum16_t<>> x(5);
   x << qnum16_t<>(0.1), qnum16_t<>(0.12), qnum16_t<>(0.14), qnum16_t<>(0.16), qnum16_t<>(0.18);
 
@@ -268,12 +268,13 @@ void autodiff_check() {
 int main(int argc, char** argv) {
   srand(time(nullptr));
 
-  run(flex_check);
-  run(flex_autodiff_check);
+  //run(flex_check);
+  //run(flex_eigen_check);
   //run(q32_add_check);
-  //run(growth_add_check);
-  //run(growth_mul_check);
-  //run(vector_check);
+  run(q16_consts_check);
+  run(q16_eigen_check);
+  run(growth_add_check);
+  run(growth_mul_check);
   //run(autodiff_check<qnum64_t<>>);
   //run(autodiff_check<qnum32_t<>>);
   //run(autodiff_check<qnum16_t<>>);

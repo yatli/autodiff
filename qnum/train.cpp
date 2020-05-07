@@ -5,7 +5,7 @@
 
 using namespace std;
 
-template<typename T> void train(double lr, int nhidden, const string& type, const char* checkpoint) {
+template<typename T> void train(int E, double lr, int nhidden, const string& type, const char* checkpoint) {
   cout << "[DEBUG] loading data..." << endl;
   auto ptrain = load_train<T>();
   auto ptest = load_test<T>();
@@ -46,7 +46,7 @@ template<typename T> void train(double lr, int nhidden, const string& type, cons
 
       if (i % 10000 == 0) {
         char buf[256];
-        sprintf(buf, "%s-h%d-lr%f-epoch-%d-step-%d.dmp", type.data(), nhidden, lr, epoch, i);
+        sprintf(buf, "%s-e%d-h%d-lr%f-epoch-%d-step-%d.dmp", type.data(), E, nhidden, lr, epoch, i);
         net.save(buf);
       }
 
@@ -64,16 +64,16 @@ template<typename T> void train(double lr, int nhidden, const string& type, cons
       auto batch_loss = 0.0;
       for(auto l: losses) { batch_loss += l; }
       batch_loss /= batch_size;
-      if (!std::isnormal(batch_loss)) {
+      if (!std::isnormal(batch_loss) || batch_loss > 10.0) {
         cout << "[DEBUG] abnormal loss detected. dump and ignore now." << endl;
         cout << "[DEBUG] current batch is: ";
         for(auto j = 0; j < batch_size && i + j < ptrain->size(); ++j) {
-          cout << smpidx[i+j] << " ";
+          cout << smpidx[i+j] << " ( " << losses[j] << " ) ";
         }
         cout << endl;
         char buf[256];
-        sprintf(buf, "%s-h%d-lr%f-epoch-%d-step-%d.dmp", type.data(), nhidden, lr, epoch, i);
-        net.save(buf);
+        sprintf(buf, "%s-e%d-h%d-lr%f-epoch-%d-step-%d.dmp", type.data(), E, nhidden, lr, epoch, i);
+        // net.save(buf);
         continue;
       }
 
@@ -83,14 +83,15 @@ template<typename T> void train(double lr, int nhidden, const string& type, cons
       auto current_acc = total_correct / ((double)i + batch_size);
       auto current_loss = total_loss / (i+batch_size);
 
-      ++nupdates;
+      nupdates += batch_size;
 
       cout 
-        << "[TRAIN] epoch = "  << setw(4)  << epoch
-        << " batchloss = "     << setw(12) << batch_loss
-        << " avgloss = "       << setw(12) << current_loss
-        << " acc = "           << setw(12) << current_acc
-        << " nupdates = "      << setw(10) << nupdates 
+        << "[TRAIN] epoch= "  << setw(3)  << epoch
+        << " step= "          << setw(5)  << i
+        << " batchloss= "     << setw(12) << batch_loss
+        << " avgloss= "       << setw(12) << current_loss
+        << " acc= "           << setw(12) << current_acc
+        << " nupdates= "      << setw(10) << nupdates 
         << endl;
 
       net.learn(T(lr));
@@ -120,8 +121,8 @@ template<typename T> void train(double lr, int nhidden, const string& type, cons
       for(auto l: losses) { total_loss += l; }
     }
     cout 
-      << " avgloss = " << setw(12) << total_loss / (double)ptest->size()
-      << " acc = "     << setw(12) << total_correct / (double)ptest->size()
+      << " avgloss= " << setw(12) << total_loss / (double)ptest->size()
+      << " acc= "     << setw(12) << total_correct / (double)ptest->size()
       << endl;
   }
 }
@@ -130,28 +131,28 @@ template<typename T, typename ... Args> void train_wrap(int E, Args... args)
 {
   switch (E) {
     case 1:
-      train<qspace_number_t<T, 1>>(args...);
+      train<qspace_number_t<T, 1>>(E, args...);
       break;
     case 2:
-      train<qspace_number_t<T, 2>>(args...);
+      train<qspace_number_t<T, 2>>(E, args...);
       break;
     case 3:
-      train<qspace_number_t<T, 3>>(args...);
+      train<qspace_number_t<T, 3>>(E, args...);
       break;
     case 4:
-      train<qspace_number_t<T, 4>>(args...);
+      train<qspace_number_t<T, 4>>(E, args...);
       break;
     case 5:
-      train<qspace_number_t<T, 5>>(args...);
+      train<qspace_number_t<T, 5>>(E, args...);
       break;
     case 6:
-      train<qspace_number_t<T, 6>>(args...);
+      train<qspace_number_t<T, 6>>(E, args...);
       break;
     case 7:
-      train<qspace_number_t<T, 7>>(args...);
+      train<qspace_number_t<T, 7>>(E, args...);
       break;
     case 8:
-      train<qspace_number_t<T, 8>>(args...);
+      train<qspace_number_t<T, 8>>(E, args...);
       break;
     default:
       std::cout << "unsupported extension bit number" << std::endl;
@@ -176,10 +177,10 @@ int main(int argc, char* argv[]) {
   if(type == "q8") train_wrap<int8_t>(E, lr, nhidden, type, chkpoint);
   else if(type == "q16") train_wrap<int16_t>(E, lr, nhidden, type, chkpoint);
   else if (type == "q32") train_wrap<int32_t>(E, lr, nhidden, type, chkpoint);
-  else if (type == "f32") train<float>(lr, nhidden, type, chkpoint);
-  else if (type == "f64") train<double>(lr, nhidden, type, chkpoint);
-  else if (type == "f16") train<float16_t>(lr, nhidden, type, chkpoint);
-  else if (type == "bf16") train<bfloat16_t>(lr, nhidden, type, chkpoint);
+  else if (type == "f32") train<float>(0, lr, nhidden, type, chkpoint);
+  else if (type == "f64") train<double>(0, lr, nhidden, type, chkpoint);
+  else if (type == "f16") train<float16_t>(0, lr, nhidden, type, chkpoint);
+  else if (type == "bf16") train<bfloat16_t>(0, lr, nhidden, type, chkpoint);
   else { cout << "unknown data type " << type << "." << endl; }
 
   return 0;

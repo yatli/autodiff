@@ -6,10 +6,10 @@
 using namespace std;
 
 template<typename T> void train(double lr, int nhidden, const string& type, const char* checkpoint) {
-  cout << "loading data..." << endl;
+  cout << "[DEBUG] loading data..." << endl;
   auto ptrain = load_train<T>();
   auto ptest = load_test<T>();
-  cout << "initializing network..." << endl;
+  cout << "[DEBUG] initializing network..." << endl;
   mlp_t<T> net(28*28, nhidden, 10);
 
   if(checkpoint != nullptr) {
@@ -17,8 +17,9 @@ template<typename T> void train(double lr, int nhidden, const string& type, cons
     net.load(checkpoint);
   }
 
-  for (int epoch = 0;; ++epoch) {
-    cout << "[TRAIN] epoch " << epoch << endl;
+  int nupdates = 0;
+
+  for (int epoch = 0; epoch < 20; ++epoch) {
     auto samples = ptrain->shuffle();
     auto batch_size = 8;
     auto run = [&](const VectorXtvar<T> &img, 
@@ -82,11 +83,14 @@ template<typename T> void train(double lr, int nhidden, const string& type, cons
       auto current_acc = total_correct / ((double)i + batch_size);
       auto current_loss = total_loss / (i+batch_size);
 
+      ++nupdates;
+
       cout 
-        << "[TRAIN] batchloss = " << setw(12) << batch_loss
-        << ", avgloss = "       << setw(12) << current_loss
-        << ", acc = "           << setw(12) << current_acc
-        << ", sample "          << setw(5)  << i << "/" << ptrain->size()
+        << "[TRAIN] epoch = "  << setw(4)  << epoch
+        << " batchloss = "     << setw(12) << batch_loss
+        << " avgloss = "       << setw(12) << current_loss
+        << " acc = "           << setw(12) << current_acc
+        << " nupdates = "      << setw(10) << nupdates 
         << endl;
 
       net.learn(T(lr));
@@ -100,7 +104,7 @@ template<typename T> void train(double lr, int nhidden, const string& type, cons
 
     total_correct = 0;
     total_loss = 0.0;
-    cout << "[TEST] epoch " << epoch << endl;
+    cout << "[TEST] epoch " << setw(4) << epoch;
     for (auto i = 0; i < ptest->size(); i += batch_size) {
       std::vector<std::thread> threads;
       for(auto j = 0; j < batch_size && i + j < ptrain->size(); ++j) {
@@ -116,8 +120,8 @@ template<typename T> void train(double lr, int nhidden, const string& type, cons
       for(auto l: losses) { total_loss += l; }
     }
     cout 
-      << "[TEST] avgloss = " << setw(12) << total_loss / (double)ptest->size()
-      << ", acc = "          << setw(12) << total_correct / (double)ptest->size()
+      << " avgloss = " << setw(12) << total_loss / (double)ptest->size()
+      << " acc = "     << setw(12) << total_correct / (double)ptest->size()
       << endl;
   }
 }

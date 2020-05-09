@@ -127,32 +127,64 @@ template<typename T> void train(int E, double lr, int nhidden, const string& typ
   }
 }
 
-template<typename T, typename ... Args> void train_wrap(int E, Args... args)
+template<typename T, int D, typename ... Args> void train_wrap_q(int E, Args... args)
 {
   switch (E) {
     case 1:
-      train<qspace_number_t<T, 1>>(E, args...);
+      train<qspace_number_t<T, 1, D>>(E, args...);
       break;
     case 2:
-      train<qspace_number_t<T, 2>>(E, args...);
+      train<qspace_number_t<T, 2, D>>(E, args...);
       break;
     case 3:
-      train<qspace_number_t<T, 3>>(E, args...);
+      train<qspace_number_t<T, 3, D>>(E, args...);
       break;
     case 4:
-      train<qspace_number_t<T, 4>>(E, args...);
+      train<qspace_number_t<T, 4, D>>(E, args...);
       break;
     case 5:
-      train<qspace_number_t<T, 5>>(E, args...);
+      train<qspace_number_t<T, 5, D>>(E, args...);
       break;
     case 6:
-      train<qspace_number_t<T, 6>>(E, args...);
+      train<qspace_number_t<T, 6, D>>(E, args...);
       break;
     case 7:
-      train<qspace_number_t<T, 7>>(E, args...);
+      train<qspace_number_t<T, 7, D>>(E, args...);
       break;
     case 8:
-      train<qspace_number_t<T, 8>>(E, args...);
+      train<qspace_number_t<T, 8, D>>(E, args...);
+      break;
+    default:
+      std::cout << "unsupported extension bit number" << std::endl;
+  }
+}
+
+template<int B, typename ... Args> void train_wrap_flex16(int E, Args... args)
+{
+  switch (E) {
+    case 1:
+      train<flexfloat<1, B - 2>>(E, args...);
+      break;
+    case 2:
+      train<flexfloat<2, B - 3>>(E, args...);
+      break;
+    case 3:
+      train<flexfloat<3, B - 4>>(E, args...);
+      break;
+    case 4:
+      train<flexfloat<4, B - 5>>(E, args...);
+      break;
+    case 5:
+      train<flexfloat<5, B - 6>>(E, args...);
+      break;
+    case 6:
+      train<flexfloat<6, B - 7>>(E, args...);
+      break;
+    case 7:
+      train<flexfloat<7, B - 8>>(E, args...);
+      break;
+    case 8:
+      train<flexfloat<8, B - 9>>(E, args...);
       break;
     default:
       std::cout << "unsupported extension bit number" << std::endl;
@@ -174,13 +206,31 @@ int main(int argc, char* argv[]) {
     chkpoint = argv[5];
   }
 
-  if(type == "q8") train_wrap<int8_t>(E, lr, nhidden, type, chkpoint);
-  else if(type == "q16") train_wrap<int16_t>(E, lr, nhidden, type, chkpoint);
-  else if (type == "q32") train_wrap<int32_t>(E, lr, nhidden, type, chkpoint);
+  if(type == "q8") train_wrap_q<int8_t, 0>(E, lr, nhidden, type, chkpoint);
+
+  else if(type == "q11") train_wrap_q<int16_t, 5>(E, lr, nhidden, type, chkpoint);
+  else if(type == "q12") train_wrap_q<int16_t, 4>(E, lr, nhidden, type, chkpoint);
+  else if(type == "q13") train_wrap_q<int16_t, 3>(E, lr, nhidden, type, chkpoint);
+  else if(type == "q14") train_wrap_q<int16_t, 2>(E, lr, nhidden, type, chkpoint);
+  else if(type == "q15") train_wrap_q<int16_t, 1>(E, lr, nhidden, type, chkpoint);
+  else if(type == "q16") train_wrap_q<int16_t, 0>(E, lr, nhidden, type, chkpoint);
+
+  else if (type == "q32") train_wrap_q<int32_t, 0>(E, lr, nhidden, type, chkpoint);
+
   else if (type == "f32") train<float>(0, lr, nhidden, type, chkpoint);
   else if (type == "f64") train<double>(0, lr, nhidden, type, chkpoint);
-  else if (type == "f16") train<float16_t>(0, lr, nhidden, type, chkpoint);
-  else if (type == "bf16") train<bfloat16_t>(0, lr, nhidden, type, chkpoint);
+
+  else if (type == "f11") train_wrap_flex16<11>(E, lr, nhidden, type, chkpoint);
+  else if (type == "f12") train_wrap_flex16<12>(E, lr, nhidden, type, chkpoint);
+  else if (type == "f13") train_wrap_flex16<13>(E, lr, nhidden, type, chkpoint);
+  else if (type == "f14") train_wrap_flex16<14>(E, lr, nhidden, type, chkpoint);
+  else if (type == "f15") train_wrap_flex16<15>(E, lr, nhidden, type, chkpoint);
+  else if (type == "f16") train_wrap_flex16<16>(E, lr, nhidden, type, chkpoint);
+  else if (type == "f17") train_wrap_flex16<17>(E, lr, nhidden, type, chkpoint);
+  else if (type == "f18") train_wrap_flex16<18>(E, lr, nhidden, type, chkpoint);
+  else if (type == "f19") train_wrap_flex16<19>(E, lr, nhidden, type, chkpoint);
+  else if (type == "f20") train_wrap_flex16<20>(E, lr, nhidden, type, chkpoint);
+
   else { cout << "unknown data type " << type << "." << endl; }
 
   return 0;

@@ -532,8 +532,7 @@ using bfloat16_t = flexfloat<8, 7>;
 namespace std
 {
   using namespace flex;
-  template <> struct is_floating_point<float16_t> : true_type { };
-  template <> struct is_floating_point<bfloat16_t> : true_type { };
+  template <uint8_t E, uint8_t F> struct is_floating_point<flexfloat<E, F>> : true_type { };
 
   template<uint8_t E, uint8_t F>
   flexfloat<E, F> log10(const flexfloat<E, F>& q)

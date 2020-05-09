@@ -1,5 +1,6 @@
 #include "common.hpp"
 using namespace std;
+using namespace Eigen;
 
 void growth_mul_check() {
   qnum::qnum16_t<> v = 0.1;

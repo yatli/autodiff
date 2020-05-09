@@ -35,7 +35,12 @@ template <> struct number_traits<int64_t> {
 /// Note, both the extension and the significant are unsigned. There's only one sign bit.
 /// The space is asymmetric with respect to zero. There's only a positive zero, and 
 /// instead of negative zero, an extra epsilon in the negative dynamic range.
-template <typename T, int E>
+/// Template parameters:
+/// - typename T: the backing storage type
+/// - int E: the number of extension bits
+/// - int D: the number of bits reduced. If 0, the significants
+///          will take std::numeric_limits<T>::digits - E bits.
+template <typename T, int E, int D=0, bool G=true>
 struct qspace_number_t
 {
   using T2x = typename number_traits<T>::T2x;
@@ -51,7 +56,7 @@ public:
     auto constexpr upper = 1 + ext_max();
     auto constexpr g_upper = 1 + g_ext_max();
 
-    if (v > upper || v < -upper) {
+    if (G && (v > upper || v < -upper)) {
       growth = true;
       if (v > g_upper) v = g_upper;
       if (v < -g_upper) v = -g_upper;
@@ -62,7 +67,7 @@ public:
     }
 
   }
-  qspace_number_t(const int& v) : qspace_number_t<T, E>(static_cast<double>(v)) { }
+  qspace_number_t(const int& v) : qspace_number_t<T, E, D, G>(static_cast<double>(v)) { }
 
   // TODO handle growth change
   qspace_number_t next() const {
@@ -92,14 +97,14 @@ public:
     return to_double();
   }
 
-  qspace_number_t<T, E> neg() const {
+  qspace_number_t<T, E, D, G> neg() const {
     return from_literal(-val, growth);
   }
 
-  std::tuple<T, T, bool> align(const qspace_number_t<T, E>& rhs) const {
+  std::tuple<T, T, bool> align(const qspace_number_t<T, E, D, G>& rhs) const {
     T l = val;
     T r = rhs.val;
-    bool g = growth || rhs.growth;
+    bool g = G && (growth || rhs.growth);
     if (g && !rhs.growth) {
       r >>= g_shift();
     } 
@@ -109,8 +114,8 @@ public:
     return std::make_tuple(l, r, g);
   }
 
-  qspace_number_t<T, E> add(const qspace_number_t<T, E>& rhs) const {
-    qspace_number_t<T, E> ret;
+  qspace_number_t<T, E, D, G> add(const qspace_number_t<T, E, D, G>& rhs) const {
+    qspace_number_t<T, E, D, G> ret;
     auto [l, r, g] = align(rhs);
     T2x tmp = T2x(l) + T2x(r);
     g = grow(tmp, g);
@@ -120,8 +125,8 @@ public:
     return ret;
   }
 
-  qspace_number_t<T, E> sub(const qspace_number_t<T, E>& rhs) const {
-    qspace_number_t<T, E> ret;
+  qspace_number_t<T, E, D, G> sub(const qspace_number_t<T, E, D, G>& rhs) const {
+    qspace_number_t<T, E, D, G> ret;
     auto [l, r, g] = align(rhs);
     T2x tmp = static_cast<T2x>(l) - static_cast<T2x>(r);
     g = grow(tmp, g);
@@ -131,8 +136,8 @@ public:
     return ret;
   }
 
-  qspace_number_t<T, E> mul(const qspace_number_t<T, E>& rhs) const {
-    qspace_number_t<T, E> ret;
+  qspace_number_t<T, E, D, G> mul(const qspace_number_t<T, E, D, G>& rhs) const {
+    qspace_number_t<T, E, D, G> ret;
     auto [l, r, g] = align(rhs);
     T2x tmp = static_cast<T2x>(l) * static_cast<T2x>(r);
     if (g) { 
@@ -151,8 +156,8 @@ public:
     return ret;
   }
 
-  qspace_number_t<T, E> div(const qspace_number_t<T, E>& rhs) const {
-    qspace_number_t<T, E> ret;
+  qspace_number_t<T, E, D, G> div(const qspace_number_t<T, E, D, G>& rhs) const {
+    qspace_number_t<T, E, D, G> ret;
     auto [l, r, g] = align(rhs);
     // pre-scaling up
     T2x tmp = static_cast<T2x>(l);
@@ -175,48 +180,48 @@ public:
     return ret;
   }
 
-  bool operator == (const qspace_number_t<T, E>& rhs) const {
+  bool operator == (const qspace_number_t<T, E, D, G>& rhs) const {
     auto [l, r, _] = align(rhs);
     return l == r;
   }
 
-  bool operator < (const qspace_number_t<T, E>& rhs) const {
+  bool operator < (const qspace_number_t<T, E, D, G>& rhs) const {
     auto [l, r, _] = align(rhs);
     return l < r;
   }
 
-  bool operator != (const qspace_number_t<T, E>& rhs) const {
+  bool operator != (const qspace_number_t<T, E, D, G>& rhs) const {
     return !(*this == rhs);
   }
 
-  bool operator <= (const qspace_number_t<T, E>& rhs) const {
+  bool operator <= (const qspace_number_t<T, E, D, G>& rhs) const {
     return *this < rhs || *this == rhs;
   }
 
-  bool operator > (const qspace_number_t<T, E>& rhs) const {
+  bool operator > (const qspace_number_t<T, E, D, G>& rhs) const {
     return rhs < *this;
   }
 
-  bool operator >= (const qspace_number_t<T, E>& rhs) const {
+  bool operator >= (const qspace_number_t<T, E, D, G>& rhs) const {
     return rhs <= *this;
   }
 
-  qspace_number_t<T, E>& operator += (const qspace_number_t<T, E>& rhs) {
+  qspace_number_t<T, E, D, G>& operator += (const qspace_number_t<T, E, D, G>& rhs) {
     *this = *this + rhs;
     return *this;
   }
 
-  qspace_number_t<T, E>& operator -= (const qspace_number_t<T, E>& rhs) {
+  qspace_number_t<T, E, D, G>& operator -= (const qspace_number_t<T, E, D, G>& rhs) {
     *this = *this - rhs;
     return *this;
   }
 
-  qspace_number_t<T, E>& operator *= (const qspace_number_t<T, E>& rhs) {
+  qspace_number_t<T, E, D, G>& operator *= (const qspace_number_t<T, E, D, G>& rhs) {
     *this = *this * rhs;
     return *this;
   }
 
-  qspace_number_t<T, E>& operator /= (const qspace_number_t<T, E>& rhs) {
+  qspace_number_t<T, E, D, G>& operator /= (const qspace_number_t<T, E, D, G>& rhs) {
     *this = *this / rhs;
     return *this;
   }
@@ -231,15 +236,17 @@ public:
     return static_cast<T>(v);
   }
 
-  static qspace_number_t<T, E> from_literal(const T& t, bool growth) {
-    qspace_number_t<T, E> ret;
+  static qspace_number_t<T, E, D, G> from_literal(const T& t, bool growth) {
+    qspace_number_t<T, E, D, G> ret;
     ret.val = t;
     ret.growth = growth;
     return ret;
   }
 
   static bool grow(T2x& v, bool g) {
-    if (g) { 
+    if (!G) {
+      return false;
+    } else if (g) { 
       return true;
     } else if (v > T_max() || v < T_min()) {
       v >>= g_shift();
@@ -260,13 +267,13 @@ public:
   }
 
   // common constants
-  static constexpr T T_max() { return std::numeric_limits<T>::max(); }
-  static constexpr T T_min() { return std::numeric_limits<T>::min(); }
-  static constexpr int joint_bits() { return std::numeric_limits<T>::digits; }
+  static constexpr int joint_bits() { return std::numeric_limits<T>::digits - D; }
+  static constexpr T T_max() { return std::numeric_limits<T>::max() >> (std::numeric_limits<T>::digits - joint_bits()); }
+  static constexpr T T_min() { return std::numeric_limits<T>::min() >> (std::numeric_limits<T>::digits - joint_bits()); }
 
   // normal mode constants
   static constexpr int ext_bits() { return E; }
-  static constexpr int frac_bits() { return joint_bits() - ext_bits(); }
+  static constexpr int frac_bits() { return joint_bits() - E - D; }
   static constexpr T ext_max() { return (1 << ext_bits()) - 1; }
   static constexpr T frac_max() { return (1 << frac_bits()) - 1; }
   static constexpr int K() { return 1 << (frac_bits() - 1); } // for rounding
@@ -282,40 +289,41 @@ public:
   static constexpr T g_threshold_min() { return T_min() >> g_shift(); }
 };
 
-template <typename T, int E>
-std::ostream& operator << (std::ostream& os, const qspace_number_t<T, E>& qnum) {
+template <typename T, int E, int D, bool G>
+std::ostream& operator << (std::ostream& os, const qspace_number_t<T, E, D, G>& qnum) {
   return os << qnum.to_double();
 }
 
-template <typename T, int E>
-qspace_number_t<T, E> operator - (const qspace_number_t<T, E> &x) {
+template <typename T, int E, int D, bool G>
+qspace_number_t<T, E, D, G> operator - (const qspace_number_t<T, E, D, G> &x) {
   return x.neg();
 }
 
 
-template <typename T, int E>
-qspace_number_t<T, E> operator + (const qspace_number_t<T, E> &lhs, const qspace_number_t<T, E> &rhs) {
+template <typename T, int E, int D, bool G>
+qspace_number_t<T, E, D, G> operator + (const qspace_number_t<T, E, D, G> &lhs, const qspace_number_t<T, E, D, G> &rhs) {
   return lhs.add(rhs);
 }
 
-template <typename T, int E>
-qspace_number_t<T, E> operator - (const qspace_number_t<T, E> &lhs, const qspace_number_t<T, E> &rhs) {
+template <typename T, int E, int D, bool G>
+qspace_number_t<T, E, D, G> operator - (const qspace_number_t<T, E, D, G> &lhs, const qspace_number_t<T, E, D, G> &rhs) {
   return lhs.sub(rhs);
 }
 
-template <typename T, int E>
-qspace_number_t<T, E> operator * (const qspace_number_t<T, E> &lhs, const qspace_number_t<T, E> &rhs) {
+template <typename T, int E, int D, bool G>
+qspace_number_t<T, E, D, G> operator * (const qspace_number_t<T, E, D, G> &lhs, const qspace_number_t<T, E, D, G> &rhs) {
   return lhs.mul(rhs);
 }
 
-template <typename T, int E>
-qspace_number_t<T, E> operator / (const qspace_number_t<T, E> &lhs, const qspace_number_t<T, E> &rhs) {
+template <typename T, int E, int D, bool G>
+qspace_number_t<T, E, D, G> operator / (const qspace_number_t<T, E, D, G> &lhs, const qspace_number_t<T, E, D, G> &rhs) {
   return lhs.div(rhs);
 }
 
+
 template<int E=1> using qnum8_t  = qspace_number_t<int8_t, E>;
 template<int E=4> using qnum16_t = qspace_number_t<int16_t, E>;
-template<int E=6>using qnum32_t  = qspace_number_t<int32_t, E>;
+template<int E=6> using qnum32_t  = qspace_number_t<int32_t, E>;
 
 }
 
@@ -324,92 +332,46 @@ namespace std
 {
   using namespace qnum;
 
-  template <> struct is_floating_point<qnum8_t<1>> : true_type { };
-  template <> struct is_floating_point<qnum16_t<1>> : true_type { };
-  template <> struct is_floating_point<qnum32_t<1>> : true_type { };
+  template <typename T, int E, int D, bool G> struct is_floating_point<qspace_number_t<T, E, D, G>> : true_type { };
 
-  template <> struct is_floating_point<qnum8_t<2>> : true_type { };
-  template <> struct is_floating_point<qnum16_t<2>> : true_type { };
-  template <> struct is_floating_point<qnum32_t<2>> : true_type { };
-
-  template <> struct is_floating_point<qnum8_t<3>> : true_type { };
-  template <> struct is_floating_point<qnum16_t<3>> : true_type { };
-  template <> struct is_floating_point<qnum32_t<3>> : true_type { };
-
-  template <> struct is_floating_point<qnum8_t<4>> : true_type { };
-  template <> struct is_floating_point<qnum16_t<4>> : true_type { };
-  template <> struct is_floating_point<qnum32_t<4>> : true_type { };
-
-  template <> struct is_floating_point<qnum8_t<5>> : true_type { };
-  template <> struct is_floating_point<qnum16_t<5>> : true_type { };
-  template <> struct is_floating_point<qnum32_t<5>> : true_type { };
-
-  template <> struct is_floating_point<qnum8_t<6>> : true_type { };
-  template <> struct is_floating_point<qnum16_t<6>> : true_type { };
-  template <> struct is_floating_point<qnum32_t<6>> : true_type { };
-
-  template <> struct is_floating_point<qnum8_t<7>> : true_type { };
-  template <> struct is_floating_point<qnum16_t<7>> : true_type { };
-  template <> struct is_floating_point<qnum32_t<7>> : true_type { };
-
-  template <> struct is_floating_point<qnum8_t<8>> : true_type { };
-  template <> struct is_floating_point<qnum16_t<8>> : true_type { };
-  template <> struct is_floating_point<qnum32_t<8>> : true_type { };
-
-  template <> struct is_floating_point<qnum8_t<9>> : true_type { };
-  template <> struct is_floating_point<qnum16_t<9>> : true_type { };
-  template <> struct is_floating_point<qnum32_t<9>> : true_type { };
-
-  template <> struct is_floating_point<qnum8_t<10>> : true_type { };
-  template <> struct is_floating_point<qnum16_t<10>> : true_type { };
-  template <> struct is_floating_point<qnum32_t<10>> : true_type { };
-
-  template <> struct is_floating_point<qnum8_t<11>> : true_type { };
-  template <> struct is_floating_point<qnum16_t<11>> : true_type { };
-  template <> struct is_floating_point<qnum32_t<11>> : true_type { };
-
-  template <> struct is_floating_point<qnum8_t<12>> : true_type { };
-  template <> struct is_floating_point<qnum16_t<12>> : true_type { };
-  template <> struct is_floating_point<qnum32_t<12>> : true_type { };
-
-  template<typename T, int E>
-  qspace_number_t<T, E> log10(const qspace_number_t<T, E>& q) noexcept
+  template<typename T, int E, int D, bool G>
+  qspace_number_t<T, E, D, G> log10(const qspace_number_t<T, E, D, G>& q) noexcept
   {
     return log10(q.to_double());
   }
 
-  template<typename T, int E>
-  qspace_number_t<T, E> log(const qspace_number_t<T, E>& q) noexcept
+  template<typename T, int E, int D, bool G>
+  qspace_number_t<T, E, D, G> log(const qspace_number_t<T, E, D, G>& q) noexcept
   {
     return log(q.to_double());
   }
 
-  template<typename T, int E>
-  qspace_number_t<T, E> exp(const qspace_number_t<T, E>& q) noexcept
+  template<typename T, int E, int D, bool G>
+  qspace_number_t<T, E, D, G> exp(const qspace_number_t<T, E, D, G>& q) noexcept
   {
     return exp(q.to_double());
   }
 
-  template<typename T, int E>
-  qspace_number_t<T, E> abs(const qspace_number_t<T, E>& q) noexcept
+  template<typename T, int E, int D, bool G>
+  qspace_number_t<T, E, D, G> abs(const qspace_number_t<T, E, D, G>& q) noexcept
   {
     auto val = q.val;
     if (val < 0) val = -val;
-    return qspace_number_t<T, E>::from_literal(val, q.growth);
+    return qspace_number_t<T, E, D, G>::from_literal(val, q.growth);
   }
 
-  template<typename T, int E>
-  qspace_number_t<T, E> copysign(const qspace_number_t<T, E>& a, const qspace_number_t<T, E>& b) noexcept
+  template<typename T, int E, int D, bool G>
+  qspace_number_t<T, E, D, G> copysign(const qspace_number_t<T, E, D, G>& a, const qspace_number_t<T, E, D, G>& b) noexcept
   {
     auto val = a.val;
     if (b.val < 0) val = -val;
-    return qspace_number_t<T, E>::from_literal(val, a.growth);
+    return qspace_number_t<T, E, D, G>::from_literal(val, a.growth);
   }
 
-  template<typename T, int E>
-  qspace_number_t<T, E> copysign(const double& a, const qspace_number_t<T, E>& b) noexcept
+  template<typename T, int E, int D, bool G>
+  qspace_number_t<T, E, D, G> copysign(const double& a, const qspace_number_t<T, E, D, G>& b) noexcept
   {
-    qspace_number_t<T, E> a_ = a;
+    qspace_number_t<T, E, D, G> a_ = a;
     if (b.val < 0) a_ = -a_;
     return a_;
   }

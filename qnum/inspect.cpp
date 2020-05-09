@@ -61,18 +61,6 @@ template<typename T, typename ... Args> void train_wrap(int E, Args... args)
     case 8:
       train<qspace_number_t<T, 8>>(args...);
       break;
-    case 9:
-      train<qspace_number_t<T, 9>>(args...);
-      break;
-    case 10:
-      train<qspace_number_t<T, 10>>(args...);
-      break;
-    case 11:
-      train<qspace_number_t<T, 11>>(args...);
-      break;
-    case 12:
-      train<qspace_number_t<T, 12>>(args...);
-      break;
     default:
       std::cout << "unsupported extension bit number" << std::endl;
   }

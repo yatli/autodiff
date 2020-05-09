@@ -43,7 +43,6 @@
 #include <atomic>
 #include <stack>
 #include <unordered_set>
-#include <deque>
 
 // autodiff includes
 #include <autodiff/common/meta.hpp>
@@ -266,7 +265,7 @@ struct Expr
     /// The color in topology_sort
     char color = {};
 
-    void topology_sort(std::deque<Expr<T>*>& vec) 
+    void topology_sort(std::vector<Expr<T>*>& vec) 
     {
       if(this->color) return;
       this->color = 1;
@@ -274,7 +273,7 @@ struct Expr
       this->children_do([&](auto x){x->topology_sort(vec); });
 
       this->color = 2;
-      vec.push_front(this);
+      vec.push_back(this);
     }
 };
 

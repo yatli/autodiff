@@ -101,11 +101,11 @@ struct mlp_t {
 
     //cout << "rewrite" << endl;
     loss.expr->rewrite();
-    std::deque<autodiff::reverse::Expr<T>*> vec;
+    std::vector<autodiff::reverse::Expr<T>*> vec;
     loss.expr->topology_sort(vec);
     loss.expr->grad = T(1.0);
-    for(auto &x : vec) {
-      x->propagate_step();
+    for(auto it = vec.rbegin(); it != vec.rend(); ++it) {
+      (*it)->propagate_step();
     }
   }
 

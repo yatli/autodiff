@@ -168,7 +168,7 @@ public:
     }
     // rounding
     if ((tmp >= 0 && r >= 0) || (tmp < 0 && r < 0)) {
-      tmp += r / 2;
+      tmp += r / 2 - 1;
     } else {
       tmp -= r/ 2;
     }
@@ -268,12 +268,12 @@ public:
 
   // common constants
   static constexpr int joint_bits() { return std::numeric_limits<T>::digits - D; }
-  static constexpr T T_max() { return std::numeric_limits<T>::max() >> (std::numeric_limits<T>::digits - joint_bits()); }
-  static constexpr T T_min() { return std::numeric_limits<T>::min() >> (std::numeric_limits<T>::digits - joint_bits()); }
+  static constexpr T T_max() { return std::numeric_limits<T>::max() >> D; }
+  static constexpr T T_min() { return std::numeric_limits<T>::min() >> D; }
 
   // normal mode constants
   static constexpr int ext_bits() { return E; }
-  static constexpr int frac_bits() { return joint_bits() - E - D; }
+  static constexpr int frac_bits() { return joint_bits() - E; }
   static constexpr T ext_max() { return (1 << ext_bits()) - 1; }
   static constexpr T frac_max() { return (1 << frac_bits()) - 1; }
   static constexpr int K() { return 1 << (frac_bits() - 1); } // for rounding

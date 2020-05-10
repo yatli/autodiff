@@ -535,6 +535,12 @@ namespace std
   template <uint8_t E, uint8_t F> struct is_floating_point<flexfloat<E, F>> : true_type { };
 
   template<uint8_t E, uint8_t F>
+  flexfloat<E, F> ceil(const flexfloat<E, F>& q)
+  {
+    return (flexfloat<E, F>)ceil((double)q);
+  }
+
+  template<uint8_t E, uint8_t F>
   flexfloat<E, F> log10(const flexfloat<E, F>& q)
   {
     return (flexfloat<E, F>)log10((double)q);

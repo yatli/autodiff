@@ -1,8 +1,11 @@
 #pragma once
+#include "nn.hpp"
 #include "common.hpp"
+#include <vector>
+#include <cstdlib>
 
 template<typename T>
-struct mlp_t {
+struct mlp_t : public nn_t<T> {
   using mat = MatrixXtvar<T>;
   using vec = VectorXtvar<T>;
   mat w1, w2;
@@ -13,7 +16,7 @@ struct mlp_t {
     w1(mat::Random(nhidden, ninput + 1) * 0.05),
     w2(mat::Random(noutput, nhidden + 1) * 0.05) { }
 
-  void save(const char* name) {
+  virtual void save(const char* name) {
     FILE* fp = fopen(name, "wb");
 
     std::vector<T> v1(sz_hidden * (sz_input+1));
@@ -37,7 +40,7 @@ struct mlp_t {
     fclose(fp);
   }
 
-  void load(const char* name) {
+  virtual void load(const char* name) {
     FILE* fp = fopen(name, "rb");
 
     std::vector<T> v1(sz_hidden * (sz_input+1));
@@ -62,7 +65,7 @@ struct mlp_t {
     }
   }
 
-  vec forward(const vec& x) {
+  virtual vec forward(const vec& x) {
     auto bx = withb(x);
     auto hx = withb(fc_layer(bx, w1, act_relu));
     auto ox = fc_layer(hx, w2, act_softmax);
@@ -83,33 +86,7 @@ struct mlp_t {
     return ox;
   }
 
-  void backward(const autodiff::reverse::Variable<T>& loss) {
-    // first check for poisonous loss values
-    if constexpr(is_qnum<T>::value) {
-      if(loss.expr->val.saturated()) {
-        return;
-      }
-    } else if constexpr(is_std_float<T>::value) {
-      if(!std::isnormal(loss.expr->val)) {
-        return;
-      }
-    } else if constexpr(is_flexfloat<T>::value) {
-      if(!std::isnormal((double)loss.expr->val)) {
-        return;
-      }
-    }
-
-    //cout << "rewrite" << endl;
-    loss.expr->rewrite();
-    std::vector<autodiff::reverse::Expr<T>*> vec;
-    loss.expr->topology_sort(vec);
-    loss.expr->grad = T(1.0);
-    for(auto it = vec.rbegin(); it != vec.rend(); ++it) {
-      (*it)->propagate_step();
-    }
-  }
-
-  void learn(const T& rate) {
+  virtual void learn(const T& rate) {
     for (int r = 0; r < sz_hidden; ++r) {
       for (int c = 0; c < sz_input + 1; ++c) {
         auto& e = w1(r, c);
@@ -126,7 +103,7 @@ struct mlp_t {
     }
   }
 
-  void check_histogram() {
+  virtual void check_histogram() {
     constexpr int nhist = 20;
     std::vector<int> histogram(nhist);
     std::vector<T> bucket_bounds(nhist);
@@ -167,9 +144,9 @@ struct mlp_t {
     std::cout << std::endl;
   }
 
-  void check_saturation() {
+  virtual void check_saturation() {
 
-    if constexpr(!std::is_same_v<T, float> && !std::is_same_v<T, double>) {
+    if constexpr(is_qnum<T>::value) {
       int ntotal = 0;
       int nsat = 0;
       int nsat_grad = 0;
@@ -195,7 +172,7 @@ struct mlp_t {
     }
   }
 
-  void dump_weights() {
+  virtual void dump_weights() {
     for (int j = 0; j < sz_hidden; ++j) {
       for (int i = 0; i < sz_input; ++i) {
         auto& e = w1(j, i + 1);

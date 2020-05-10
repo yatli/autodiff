@@ -335,6 +335,12 @@ namespace std
   template <typename T, int E, int D, bool G> struct is_floating_point<qspace_number_t<T, E, D, G>> : true_type { };
 
   template<typename T, int E, int D, bool G>
+  qspace_number_t<T, E, D, G> ceil(const qspace_number_t<T, E, D, G>& q) noexcept
+  {
+    return ceil(q.to_double());
+  }
+
+  template<typename T, int E, int D, bool G>
   qspace_number_t<T, E, D, G> log10(const qspace_number_t<T, E, D, G>& q) noexcept
   {
     return log10(q.to_double());

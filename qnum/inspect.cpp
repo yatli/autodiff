@@ -6,7 +6,7 @@ using namespace std;
 
 template<typename T> void train(double lr, int nhidden, const string& type, const char* checkpoint) {
   cout << "loading data..." << endl;
-  auto ptrain = load_train<T>();
+  auto ptrain = load_mnist_train<T>();
   cout << "initializing network..." << endl;
   mlp_t<T> net(28*28, nhidden, 10);
 
@@ -21,7 +21,7 @@ template<typename T> void train(double lr, int nhidden, const string& type, cons
   int smpidx;
   while(true) {
     scanf("%d", &smpidx);
-    if(smpidx < 0 || smpidx >= ptrain->size()) {
+    if(smpidx < 0 || smpidx >= ptrain->size) {
       break;
     }
     auto label = ptrain->labels[smpidx];

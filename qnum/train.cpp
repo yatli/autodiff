@@ -2,37 +2,71 @@
 #include "data.hpp"
 #include "mlp.hpp"
 #include <thread>
+#include <tuple>
 
 using namespace std;
 
-template<typename T> void train(int E, double lr, int nhidden, const string& type, const char* checkpoint) {
+template<typename T>
+std::tuple<const dataset_t<T>*, const dataset_t<T>*> load_data(const string& dataset) {
   cout << "[DEBUG] loading data..." << endl;
-  auto ptrain = load_train<T>();
-  auto ptest = load_test<T>();
+  const dataset_t<T> *ptrain, *ptest;
+  if (dataset == "cifar10") {
+    ptrain = load_cifar10_train<T>();
+    ptest = load_cifar10_test<T>();
+  } else if (dataset == "mnist") {
+    ptrain = load_mnist_train<T>();
+    ptest = load_mnist_test<T>();
+  } else {
+    printf("error: unrecognized dataset %s\n", dataset.c_str());
+    exit(-1);
+  }
+  return std::make_tuple(ptrain, ptest);
+}
+
+template<typename T> nn_t<T>* init_net(const string& arch, int nhidden, const dataset_t<T>* ptrain) {
   cout << "[DEBUG] initializing network..." << endl;
-  mlp_t<T> net(28*28, nhidden, 10);
+  if (arch == "mlp") {
+    return new mlp_t<T>(ptrain->height * ptrain->width * ptrain->nchannel, nhidden, ptrain->nclass);
+  } else if (arch == "cnn") {
+    // TODO cnn
+    return nullptr;
+  } else {
+    printf("error: unrecognized network arch %s\n", arch.c_str());
+    exit(-1);
+  }
+}
+
+template<typename T> void train(int E, const string& arch, const string& dataset, double lr, int nhidden, const string& type, const char* checkpoint) {
+  auto dataset_tup = load_data<T>(dataset);
+  const dataset_t<T>* ptrain = std::get<0>(dataset_tup);
+  const dataset_t<T>* ptest = std::get<1>(dataset_tup);
+  nn_t<T>* pnet = init_net<T>(arch, nhidden, ptrain);
 
   if(checkpoint != nullptr) {
     cout << "[DEBUG] Loading checkpoint from " << checkpoint << endl;
-    net.load(checkpoint);
+    pnet->load(checkpoint);
   }
 
   int nupdates = 0;
 
   for (int epoch = 0; epoch < 20; ++epoch) {
     auto samples = ptrain->shuffle();
+#if NDEBUG
     auto batch_size = 8;
+#else
+    auto batch_size = 1;
+#endif
     auto run = [&](const VectorXtvar<T> &img, 
                   const VectorXtvar<T> &label, 
                   double& loss_store,
                   int& correct_store,
                   bool backward) {
-      auto label_predict = net.forward(img);
+      auto label_predict = pnet->forward(img);
       auto loss = loss_crossent(label, label_predict);
       loss_store = static_cast<double>(loss.expr->val);
       correct_store = (argmax(label) == argmax(label_predict));
       if (backward) {
-        net.backward(loss);
+        pnet->backward(loss);
       }
     };
 
@@ -42,16 +76,16 @@ template<typename T> void train(int E, double lr, int nhidden, const string& typ
     double total_loss = 0.0;
     auto smpidx = ptrain->shuffle();
 
-    for (auto i = 0; i < ptrain->size(); i += batch_size) {
+    for (auto i = 0; i < ptrain->size; i += batch_size) {
 
       if (i % 10000 == 0) {
         char buf[256];
-        sprintf(buf, "%s-e%d-h%d-lr%f-epoch-%d-step-%d.dmp", type.data(), E, nhidden, lr, epoch, i);
-        net.save(buf);
+        sprintf(buf, "%s-%s-%s-e%d-h%d-lr%f-epoch-%d-step-%d.dmp", type.data(), arch.data(), dataset.data(), E, nhidden, lr, epoch, i);
+        pnet->save(buf);
       }
 
       std::vector<std::thread> threads;
-      for(auto j = 0; j < batch_size && i + j < ptrain->size(); ++j) {
+      for(auto j = 0; j < batch_size && i + j < ptrain->size; ++j) {
         threads.emplace_back([&](auto idx){
           run(ptrain->imgs[smpidx[idx]], ptrain->labels[smpidx[idx]], losses[idx - i], corrects[idx - i], true);
         }, i+j);
@@ -67,13 +101,13 @@ template<typename T> void train(int E, double lr, int nhidden, const string& typ
       if (!std::isnormal(batch_loss) || batch_loss > 10.0) {
         cout << "[DEBUG] abnormal loss detected. dump and ignore now." << endl;
         cout << "[DEBUG] current batch is: ";
-        for(auto j = 0; j < batch_size && i + j < ptrain->size(); ++j) {
+        for(auto j = 0; j < batch_size && i + j < ptrain->size; ++j) {
           cout << smpidx[i+j] << " ( " << losses[j] << " ) ";
         }
         cout << endl;
         char buf[256];
-        sprintf(buf, "%s-e%d-h%d-lr%f-epoch-%d-step-%d.dmp", type.data(), E, nhidden, lr, epoch, i);
-        // net.save(buf);
+        sprintf(buf, "%s-%s-%s-e%d-h%d-lr%f-epoch-%d-step-%d.dmp", type.data(), arch.data(), dataset.data(), E, nhidden, lr, epoch, i);
+        // pnet->save(buf);
         continue;
       }
 
@@ -94,10 +128,10 @@ template<typename T> void train(int E, double lr, int nhidden, const string& typ
         << " nupdates= "      << setw(10) << nupdates 
         << endl;
 
-      net.learn(T(lr));
+      pnet->learn(T(lr));
 
       if ((i/batch_size) % 10 == 0) {
-        net.check_histogram();
+        pnet->check_histogram();
         // TODO check saturation, but on all nodes, not just weights
       }
 
@@ -106,9 +140,9 @@ template<typename T> void train(int E, double lr, int nhidden, const string& typ
     total_correct = 0;
     total_loss = 0.0;
     cout << "[TEST] epoch " << setw(4) << epoch;
-    for (auto i = 0; i < ptest->size(); i += batch_size) {
+    for (auto i = 0; i < ptest->size; i += batch_size) {
       std::vector<std::thread> threads;
-      for(auto j = 0; j < batch_size && i + j < ptrain->size(); ++j) {
+      for(auto j = 0; j < batch_size && i + j < ptrain->size; ++j) {
         threads.emplace_back([&](auto idx){
           run(ptest->imgs[idx], ptest->labels[idx], losses[idx - i], corrects[idx - i], false);
         }, i+j);
@@ -121,8 +155,8 @@ template<typename T> void train(int E, double lr, int nhidden, const string& typ
       for(auto l: losses) { total_loss += l; }
     }
     cout 
-      << " avgloss= " << setw(12) << total_loss / (double)ptest->size()
-      << " acc= "     << setw(12) << total_correct / (double)ptest->size()
+      << " avgloss= " << setw(12) << total_loss / (double)ptest->size
+      << " acc= "     << setw(12) << total_correct / (double)ptest->size
       << endl;
   }
 }
@@ -130,15 +164,18 @@ template<typename T> void train(int E, double lr, int nhidden, const string& typ
 template<typename T, int D, typename ... Args> void train_wrap_q(int E, Args... args)
 {
   switch (E) {
+#if NDEBUG
     case 1:
       train<qspace_number_t<T, 1, D>>(E, args...);
       break;
     case 2:
       train<qspace_number_t<T, 2, D>>(E, args...);
       break;
+#endif
     case 3:
       train<qspace_number_t<T, 3, D>>(E, args...);
       break;
+#if NDEBUG
     case 4:
       train<qspace_number_t<T, 4, D>>(E, args...);
       break;
@@ -154,6 +191,7 @@ template<typename T, int D, typename ... Args> void train_wrap_q(int E, Args... 
     case 8:
       train<qspace_number_t<T, 8, D>>(E, args...);
       break;
+#endif
     default:
       std::cout << "unsupported extension bit number" << std::endl;
   }
@@ -162,6 +200,7 @@ template<typename T, int D, typename ... Args> void train_wrap_q(int E, Args... 
 template<int B, typename ... Args> void train_wrap_flex16(int E, Args... args)
 {
   switch (E) {
+#if NDEBUG
     case 1:
       train<flexfloat<1, B - 2>>(E, args...);
       break;
@@ -183,6 +222,7 @@ template<int B, typename ... Args> void train_wrap_flex16(int E, Args... args)
     case 7:
       train<flexfloat<7, B - 8>>(E, args...);
       break;
+#endif
     case 8:
       train<flexfloat<8, B - 9>>(E, args...);
       break;
@@ -194,42 +234,50 @@ template<int B, typename ... Args> void train_wrap_flex16(int E, Args... args)
 int main(int argc, char* argv[]) {
 
   if (argc < 5) {
-    std::cout << "usage: train num_type ext_bits lr nhidden [checkpoint_file]" << std::endl;
+    std::cout << "usage: train num_type arch[mlp|cnn] dataset[mnist|cifar10] ext_bits lr nhidden [checkpoint_file]" << std::endl;
   }
 
   std::string type = argv[1];
-  int E = atoi(argv[2]);
-  double lr = atof(argv[3]);
-  int nhidden = atoi(argv[4]);
+  std::string arch = argv[2];
+  std::string dataset = argv[3];
+  int E = atoi(argv[4]);
+  double lr = atof(argv[5]);
+  int nhidden = atoi(argv[6]);
   char* chkpoint = nullptr;
-  if (argc == 6) {
-    chkpoint = argv[5];
+  if (argc == 8) {
+    chkpoint = argv[7];
   }
 
-  if(type == "q8") train_wrap_q<int8_t, 0>(E, lr, nhidden, type, chkpoint);
+#if! NDEBUG
+  if(type == "q16") train_wrap_q<int16_t, 0>(E, arch, dataset, lr, nhidden, type, chkpoint);
+  else if (type == "f32") train<float>(0, arch, dataset, lr, nhidden, type, chkpoint);
+#else
 
-  else if(type == "q11") train_wrap_q<int16_t, 5>(E, lr, nhidden, type, chkpoint);
-  else if(type == "q12") train_wrap_q<int16_t, 4>(E, lr, nhidden, type, chkpoint);
-  else if(type == "q13") train_wrap_q<int16_t, 3>(E, lr, nhidden, type, chkpoint);
-  else if(type == "q14") train_wrap_q<int16_t, 2>(E, lr, nhidden, type, chkpoint);
-  else if(type == "q15") train_wrap_q<int16_t, 1>(E, lr, nhidden, type, chkpoint);
-  else if(type == "q16") train_wrap_q<int16_t, 0>(E, lr, nhidden, type, chkpoint);
+  if(type == "q8") train_wrap_q<int8_t, 0>(E, arch, dataset, lr, nhidden, type, chkpoint);
 
-  else if (type == "q32") train_wrap_q<int32_t, 0>(E, lr, nhidden, type, chkpoint);
+  else if(type == "q11") train_wrap_q<int16_t, 5>(E, arch, dataset, lr, nhidden, type, chkpoint);
+  else if(type == "q12") train_wrap_q<int16_t, 4>(E, arch, dataset, lr, nhidden, type, chkpoint);
+  else if(type == "q13") train_wrap_q<int16_t, 3>(E, arch, dataset, lr, nhidden, type, chkpoint);
+  else if(type == "q14") train_wrap_q<int16_t, 2>(E, arch, dataset, lr, nhidden, type, chkpoint);
+  else if(type == "q15") train_wrap_q<int16_t, 1>(E, arch, dataset, lr, nhidden, type, chkpoint);
+  else if(type == "q16") train_wrap_q<int16_t, 0>(E, arch, dataset, lr, nhidden, type, chkpoint);
 
-  else if (type == "f32") train<float>(0, lr, nhidden, type, chkpoint);
-  else if (type == "f64") train<double>(0, lr, nhidden, type, chkpoint);
+  else if (type == "q32") train_wrap_q<int32_t, 0>(E, arch, dataset, lr, nhidden, type, chkpoint);
 
-  else if (type == "f11") train_wrap_flex16<11>(E, lr, nhidden, type, chkpoint);
-  else if (type == "f12") train_wrap_flex16<12>(E, lr, nhidden, type, chkpoint);
-  else if (type == "f13") train_wrap_flex16<13>(E, lr, nhidden, type, chkpoint);
-  else if (type == "f14") train_wrap_flex16<14>(E, lr, nhidden, type, chkpoint);
-  else if (type == "f15") train_wrap_flex16<15>(E, lr, nhidden, type, chkpoint);
-  else if (type == "f16") train_wrap_flex16<16>(E, lr, nhidden, type, chkpoint);
-  else if (type == "f17") train_wrap_flex16<17>(E, lr, nhidden, type, chkpoint);
-  else if (type == "f18") train_wrap_flex16<18>(E, lr, nhidden, type, chkpoint);
-  else if (type == "f19") train_wrap_flex16<19>(E, lr, nhidden, type, chkpoint);
-  else if (type == "f20") train_wrap_flex16<20>(E, lr, nhidden, type, chkpoint);
+  else if (type == "f32") train<float>(0, arch, dataset, lr, nhidden, type, chkpoint);
+  else if (type == "f64") train<double>(0, arch, dataset, lr, nhidden, type, chkpoint);
+
+  else if (type == "f11") train_wrap_flex16<11>(E, arch, dataset, lr, nhidden, type, chkpoint);
+  else if (type == "f12") train_wrap_flex16<12>(E, arch, dataset, lr, nhidden, type, chkpoint);
+  else if (type == "f13") train_wrap_flex16<13>(E, arch, dataset, lr, nhidden, type, chkpoint);
+  else if (type == "f14") train_wrap_flex16<14>(E, arch, dataset, lr, nhidden, type, chkpoint);
+  else if (type == "f15") train_wrap_flex16<15>(E, arch, dataset, lr, nhidden, type, chkpoint);
+  else if (type == "f16") train_wrap_flex16<16>(E, arch, dataset, lr, nhidden, type, chkpoint);
+  else if (type == "f17") train_wrap_flex16<17>(E, arch, dataset, lr, nhidden, type, chkpoint);
+  else if (type == "f18") train_wrap_flex16<18>(E, arch, dataset, lr, nhidden, type, chkpoint);
+  else if (type == "f19") train_wrap_flex16<19>(E, arch, dataset, lr, nhidden, type, chkpoint);
+  else if (type == "f20") train_wrap_flex16<20>(E, arch, dataset, lr, nhidden, type, chkpoint);
+#endif
 
   else { cout << "unknown data type " << type << "." << endl; }
 

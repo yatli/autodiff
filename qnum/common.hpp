@@ -255,6 +255,7 @@ ndarray_t<T> maxpooling_2d(ndarray_t<T>& a, int sx, int sy) {
       }
     }
   }
+  return ret;
 }
 
 template<typename T>

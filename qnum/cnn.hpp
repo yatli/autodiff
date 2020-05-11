@@ -20,13 +20,13 @@ struct cnn_t : public nn_t<T> {
     W1.reserve(32);
     W2.reserve(64);
     W3.reserve(64);
-    for(int i=0;i<32;++i) { W1.emplace_back(3, 3, 3, 0.05); nn_t<T>::register_params(W1[i].v); }
-    for(int i=0;i<64;++i) { W2.emplace_back(3, 3, 3, 0.05); nn_t<T>::register_params(W2[i].v); }
-    for(int i=0;i<64;++i) { W3.emplace_back(3, 3, 3, 0.05); nn_t<T>::register_params(W3[i].v); }
+    for(int i=0;i<32;++i) { W1.emplace_back(c, 3, 3, 0.05); nn_t<T>::register_params(W1[i].v); }
+    for(int i=0;i<64;++i) { W2.emplace_back(32, 3, 3, 0.05); nn_t<T>::register_params(W2[i].v); }
+    for(int i=0;i<64;++i) { W3.emplace_back(64, 3, 3, 0.05); nn_t<T>::register_params(W3[i].v); }
     nn_t<T>::register_params(b1.v);
     nn_t<T>::register_params(b2.v);
     nn_t<T>::register_params(b3.v);
-    Wf1 = mat::Random(512, 64 * h / 2 * w / 2 +1) * 0.05;
+    Wf1 = mat::Random(512, 64 * h / 4 * w / 4 +1) * 0.05;
     Wf2 = mat::Random(nclass, 512 + 1) * 0.05;
     nn_t<T>::register_params(Wf1);
     nn_t<T>::register_params(Wf2);

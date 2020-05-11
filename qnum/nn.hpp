@@ -5,9 +5,10 @@ template<typename T>
 struct nn_t {
   using mat = MatrixXtvar<T>;
   using vec = VectorXtvar<T>;
+  using var = autodiff::reverse::Variable<T>;
 
   /// to be filled in instance ctor
-  std::vector<autodiff::reverse::Variable<T>*> params;
+  std::vector<var*> params;
 
   void register_params(vec& v) {
     for(int i=0;i<v.size(); ++i) {
@@ -48,7 +49,7 @@ struct nn_t {
     }
   }
 
-  void backward(const autodiff::reverse::Variable<T>& loss) {
+  void backward(const var& loss) {
     // first check for poisonous loss values
     if constexpr(is_qnum<T>::value) {
       if(loss.expr->val.saturated()) {

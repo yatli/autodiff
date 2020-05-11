@@ -17,6 +17,9 @@ struct cnn_t : public nn_t<T> {
   cnn_t(int c, int h, int w, int nclass)
     : nchannel(c), width(w), height(h), nclass(nclass),
       b1(32, h, w, 0.05), b2(64, h/2, w/2, 0.05), b3(64, h/2, w/2, 0.05) {
+    W1.reserve(32);
+    W2.reserve(64);
+    W3.reserve(64);
     for(int i=0;i<32;++i) { W1.emplace_back(3, 3, 3, 0.05); nn_t<T>::register_params(W1[i].v); }
     for(int i=0;i<64;++i) { W2.emplace_back(3, 3, 3, 0.05); nn_t<T>::register_params(W2[i].v); }
     for(int i=0;i<64;++i) { W3.emplace_back(3, 3, 3, 0.05); nn_t<T>::register_params(W3[i].v); }

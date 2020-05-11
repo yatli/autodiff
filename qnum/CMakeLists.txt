@@ -1,3 +1,7 @@
+if (TRAIN_PARTIAL_BUILD)
+  add_definitions(-DTRAIN_PARTIAL_BUILD)
+endif()
+
 add_executable(smoketest test.cpp)
 add_executable(train train.cpp)
 add_executable(rewritetest rewritetest.cpp)

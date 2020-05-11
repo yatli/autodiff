@@ -1,10 +1,13 @@
 #include "common.hpp"
 #include "data.hpp"
 #include "mlp.hpp"
+#include "cnn.hpp"
 #include <thread>
 #include <tuple>
 
 using namespace std;
+
+int g_batch_size = 1;
 
 template<typename T>
 std::tuple<const dataset_t<T>*, const dataset_t<T>*> load_data(const string& dataset) {
@@ -28,8 +31,7 @@ template<typename T> nn_t<T>* init_net(const string& arch, int nhidden, const da
   if (arch == "mlp") {
     return new mlp_t<T>(ptrain->height * ptrain->width * ptrain->nchannel, nhidden, ptrain->nclass);
   } else if (arch == "cnn") {
-    // TODO cnn
-    return nullptr;
+    return new cnn_t<T>(ptrain->nchannel, ptrain->height, ptrain->width, ptrain->nclass);
   } else {
     printf("error: unrecognized network arch %s\n", arch.c_str());
     exit(-1);
@@ -51,11 +53,7 @@ template<typename T> void train(int E, const string& arch, const string& dataset
 
   for (int epoch = 0; epoch < 20; ++epoch) {
     auto samples = ptrain->shuffle();
-#if NDEBUG
-    auto batch_size = 8;
-#else
-    auto batch_size = 1;
-#endif
+    auto batch_size = g_batch_size;
     auto run = [&](const VectorXtvar<T> &img, 
                   const VectorXtvar<T> &label, 
                   double& loss_store,
@@ -164,7 +162,7 @@ template<typename T> void train(int E, const string& arch, const string& dataset
 template<typename T, int D, typename ... Args> void train_wrap_q(int E, Args... args)
 {
   switch (E) {
-#if NDEBUG
+#if !defined(TRAIN_PARTIAL_BUILD)
     case 1:
       train<qspace_number_t<T, 1, D>>(E, args...);
       break;
@@ -175,7 +173,7 @@ template<typename T, int D, typename ... Args> void train_wrap_q(int E, Args... 
     case 3:
       train<qspace_number_t<T, 3, D>>(E, args...);
       break;
-#if NDEBUG
+#if !defined(TRAIN_PARTIAL_BUILD)
     case 4:
       train<qspace_number_t<T, 4, D>>(E, args...);
       break;
@@ -200,7 +198,7 @@ template<typename T, int D, typename ... Args> void train_wrap_q(int E, Args... 
 template<int B, typename ... Args> void train_wrap_flex16(int E, Args... args)
 {
   switch (E) {
-#if NDEBUG
+#if !defined(TRAIN_PARTIAL_BUILD)
     case 1:
       train<flexfloat<1, B - 2>>(E, args...);
       break;
@@ -233,23 +231,25 @@ template<int B, typename ... Args> void train_wrap_flex16(int E, Args... args)
 
 int main(int argc, char* argv[]) {
 
-  if (argc < 5) {
-    std::cout << "usage: train num_type arch[mlp|cnn] dataset[mnist|cifar10] ext_bits lr nhidden [checkpoint_file]" << std::endl;
+  if (argc < 8) {
+    std::cout << "usage: train num_type arch[mlp|cnn] dataset[mnist|cifar10] batchsize ext_bits lr nhidden [checkpoint_file]" << std::endl;
   }
 
   std::string type = argv[1];
   std::string arch = argv[2];
   std::string dataset = argv[3];
-  int E = atoi(argv[4]);
-  double lr = atof(argv[5]);
-  int nhidden = atoi(argv[6]);
+  g_batch_size = atoi(argv[4]);
+  int E = atoi(argv[5]);
+  double lr = atof(argv[6]);
+  int nhidden = atoi(argv[7]);
   char* chkpoint = nullptr;
-  if (argc == 8) {
-    chkpoint = argv[7];
+  if (argc == 9) {
+    chkpoint = argv[8];
   }
 
-#if! NDEBUG
+#if defined(TRAIN_PARTIAL_BUILD)
   if(type == "q16") train_wrap_q<int16_t, 0>(E, arch, dataset, lr, nhidden, type, chkpoint);
+  else if (type == "f32") train<float>(0, arch, dataset, lr, nhidden, type, chkpoint);
   else if (type == "f32") train<float>(0, arch, dataset, lr, nhidden, type, chkpoint);
 #else
 

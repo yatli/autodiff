@@ -16,16 +16,16 @@ struct cnn_t : public nn_t<T> {
 
   cnn_t(int c, int h, int w, int nclass)
     : nchannel(c), width(w), height(h), nclass(nclass),
-      b1(16, h, w, 0.05) , b2(32, h/2, w/2, 0.05)
+      b1(16, h, w, 0.00) , b2(32, h/2, w/2, 0.00)
   {
     W1.reserve(16);
     W2.reserve(32);
-    for(int i=0;i<16;++i) { W1.emplace_back(c, 3, 3, 0.05); nn_t<T>::register_params(W1[i].v); }
-    for(int i=0;i<32;++i) { W2.emplace_back(16, 3, 3, 0.05); nn_t<T>::register_params(W2[i].v); }
+    for(int i=0;i<16;++i) { W1.emplace_back(c, 3, 3, 16); nn_t<T>::register_params(W1[i].v); }
+    for(int i=0;i<32;++i) { W2.emplace_back(16, 3, 3, 32); nn_t<T>::register_params(W2[i].v); }
     nn_t<T>::register_params(b1.v);
     nn_t<T>::register_params(b2.v);
-    Wf1 = mat::Random(128, 32 * h / 4 * w / 4 +1) * 0.05;
-    Wf2 = mat::Random(nclass, 128 + 1) * 0.05;
+    Wf1 = weight_init<T>(32 * h / 4 * w / 4, 128, true);
+    Wf2 = weight_init<T>(128, nclass, true);
     nn_t<T>::register_params(Wf1);
     nn_t<T>::register_params(Wf2);
   }

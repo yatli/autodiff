@@ -47,6 +47,29 @@ template<> struct is_std_float<double> {
 
 AUTODIFF_DEFINE_EIGEN_TYPEDEFS_ALL_SIZES_T(autodiff::reverse::Variable<T>, tvar);
 
+/// xavier initialization
+std::normal_distribution<double> glorot_normal(int nin, int nout) {
+  double dev = std::sqrt(2.0 / (nin + nout));
+  return std::normal_distribution<double>(0.0, dev);
+}
+
+template<typename T>
+MatrixXtvar<T> weight_init(int nin, int nout, bool bias) {
+  if (bias) {
+    ++nin;
+  }
+  MatrixXtvar<T> ret;
+  ret.resize(nout, nin);
+  std::default_random_engine rng;
+  auto dist = glorot_normal(nin, nout);
+  for(int r = 0; r < nout; ++r) {
+    for(int c = 0; c < nin; ++c) {
+      ret(r, c) = dist(rng);
+    }
+  }
+  return ret;
+}
+
 template<typename T>
 struct ndarray_t {
   VectorXtvar<T> v;
@@ -57,11 +80,23 @@ struct ndarray_t {
     assert(v.size() == c * h * w);
   }
 
-  ndarray_t(int c, int h, int w)
-    : c(c), h(h), w(w) {
-    v.resize(c*h*w);
+  ndarray_t(int nin, int h, int w)
+    : c(nin), h(h), w(w) {
+    v.resize(nin*h*w);
   }
 
+  /// with xavier initialization.
+  ndarray_t(int nin, int h, int w, int nout)
+    : c(nin), h(h), w(w) {
+    v.resize(nin*h*w);
+    std::default_random_engine rng;
+    auto dist = glorot_normal(nin * h * w, nout * h * w);
+    for(int i=0; i < v.size(); ++i) {
+      v[i] = dist(rng);
+    }
+  }
+
+  /// with uniform initialization.
   ndarray_t(int c, int h, int w, double range): c(c), h(h), w(w) {
     v = VectorXtvar<T>::Random(c*h*w) * range;
   }

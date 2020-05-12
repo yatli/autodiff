@@ -240,7 +240,7 @@ ndarray_t<T> maxpooling_2d(ndarray_t<T>& a, int sx, int sy) {
       for (int x = 0; x < ret.w; ++x) {
         T max_val = a(c, y * sy, x * sx).expr->val;
         int my = y * sy;
-        int mx = y * sx;
+        int mx = x * sx;
         for(int dy = 0; dy < sy; ++dy) {
           for (int dx = 0; dx < sx; ++dx) {
             T cur = a(c, y * sy + dy, x * sx + dx).expr->val;

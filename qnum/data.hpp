@@ -153,7 +153,7 @@ const dataset_t<T>* load_cifar_data(bool train) {
       for(int c = 0; c < c_cifar10_imgc; ++c) {
         for(int h = 0; h < c_cifar10_imgh; ++h) {
           for(int w = 0; w < c_cifar10_imgw; ++w) {
-            p->imgs[offset][w + h * c_cifar10_imgw + c + c_cifar10_imgw * c_cifar10_imgh] = autodiff::reverse::constant<T>(T(data[i].image[c][h][w] / 255.0));
+            p->imgs[offset][w + h * c_cifar10_imgw + c * c_cifar10_imgw * c_cifar10_imgh] = autodiff::reverse::constant<T>(T(data[i].image[c][h][w] / 255.0));
           }
         }
       }

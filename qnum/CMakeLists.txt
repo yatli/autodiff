@@ -1,5 +1,5 @@
-if (TRAIN_PARTIAL_BUILD)
-  add_definitions(-DTRAIN_PARTIAL_BUILD)
+if (PARTIAL_BUILD)
+  add_definitions(-DPARTIAL_BUILD)
 endif()
 
 add_executable(smoketest test.cpp)

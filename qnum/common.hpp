@@ -1,7 +1,7 @@
 #pragma once
 
 #if !NDEBUG
-#define TRAIN_PARTIAL_BUILD
+#define PARTIAL_BUILD
 #endif
 
 #include <iostream>

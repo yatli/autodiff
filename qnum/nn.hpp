@@ -71,9 +71,6 @@ struct nn_t {
     loss.expr->topology_sort(vec);
     loss.expr->grad = T(1.0);
     for(auto it = vec.rbegin(); it != vec.rend(); ++it) {
-      if ((*it)->grad > 1.0) {
-        std::cout << "large grad: " << (*it)->grad << ", expr is: " << (*it)->name() << " " << (*it)->val << std::endl;
-      }
       (*it)->propagate_step();
     }
     //loss.expr->propagate(T(1.0));

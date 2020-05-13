@@ -519,7 +519,7 @@ struct SumExpr : Expr<T>
 
   std::vector<ExprPtr<T>> elements;
 
-  SumExpr(const T& val, const std::vector<ExprPtr<T>> es): Expr<T>(val), elements(es) {}
+  SumExpr(const T& val, const std::vector<ExprPtr<T>> &es): Expr<T>(val), elements(es) {}
 
   virtual void propagate_step() 
   {
@@ -566,7 +566,7 @@ struct ProdExpr : Expr<T>
 
   std::vector<ExprPtr<T>> elements;
 
-  ProdExpr(const T& val, const std::vector<ExprPtr<T>> es): Expr<T>(val), elements(es) {}
+  ProdExpr(const T& val, const std::vector<ExprPtr<T>> &es): Expr<T>(val), elements(es) {}
 
   virtual void propagate_step() 
   {
@@ -1583,6 +1583,21 @@ template<typename T> ExprPtr<T> erf(const Variable<T>& x) { return erf(x.expr); 
 //------------------------------------------------------------------------------
 template <typename T> ExprPtr<T> sigmoid(const Variable<T>& x) { return sigmoid(x.expr); }
 template <typename T> ExprPtr<T> relu(const Variable<T>& x) { return relu(x.expr); }
+
+//------------------------------------------------------------------------------
+// VECTOR FUNCTIONS
+//------------------------------------------------------------------------------
+template <typename T> ExprPtr<T> sum(const std::vector<Variable<T>> &xs) {
+  T acc = T(0.0);
+  std::vector<ExprPtr<T>> exps;
+  exps.reserve(xs.size());
+  for(const auto &x: xs) {
+    acc += x.expr->val;
+    exps.push_back(x.expr);
+  }
+  return std::make_shared<SumExpr<T>>(acc, exps);
+}
+
 
 /// Return the value of a scalar.
 template<typename U, EnableIf<isArithmetic<U>>...>

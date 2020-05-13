@@ -16,7 +16,7 @@ struct cnn_t : public nn_t<T> {
 
   cnn_t(int c, int h, int w, int nclass)
     : nchannel(c), width(w), height(h), nclass(nclass),
-      b1(16, h, w, 0.00) , b2(32, h/2, w/2, 0.00)
+      b1(16, h, w) , b2(32, h/2, w/2)
   {
     W1.reserve(16);
     W2.reserve(32);
@@ -34,13 +34,13 @@ struct cnn_t : public nn_t<T> {
     ndarray_t<T> x1(x, nchannel, height, width);
     auto x2 = conv2d_layer(x1, W1, b1, act_relu);
     auto x3 = maxpooling_2d(x2, 2, 2);
-    dropout(x3.v, 0.25);
+    // dropout(x3.v, 0.25);
     auto x4 = conv2d_layer(x3, W2, b2, act_relu);
     auto x6 = maxpooling_2d(x4, 2, 2);
-    dropout(x6.v, 0.25);
+    // dropout(x6.v, 0.25);
     auto x7 = withb(x6.v);
     auto x8 = fc_layer(x7, Wf1, act_relu);
-    dropout(x8, 0.5);
+    // dropout(x8, 0.5);
     auto x9 = withb(x8);
     auto x10 = fc_layer(x9, Wf2, act_softmax);
     return x10;

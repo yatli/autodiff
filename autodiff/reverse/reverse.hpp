@@ -523,7 +523,7 @@ struct SumExpr : Expr<T>
 
   virtual void propagate_step() 
   {
-    for(auto x: elements) {
+    for(const auto &x: elements) {
       x->grad += this->grad;
     }
   }
@@ -694,7 +694,7 @@ struct MulExpr : BinaryExpr<T>
     virtual void propagate_step() 
     {
       l->grad += this->grad * r->val;
-      r->grad -= this->grad * l->val;
+      r->grad += this->grad * l->val;
     }
 
     virtual void propagate(const T& wprime)

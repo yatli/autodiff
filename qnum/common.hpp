@@ -151,27 +151,6 @@ VectorXtvar<T> act_relu(const VectorXtvar<T>& x) {
 
 template<typename T>
 VectorXtvar<T> act_softmax(const VectorXtvar<T>& x) {
-  //const auto n = x.size();
-  //VectorXtvar<T> ret(n);
-  //autodiff::reverse::Variable<T> sum = 0;
-  //auto maxi = 0;
-  //for (auto i = 0; i < n; ++i) {
-    //if(x[i].expr->val > x[maxi].expr->val) {
-      //maxi = i;
-    //}
-  //}
-  //for (auto i = 0; i < n; ++i) {
-    //ret[i] = exp(x[i] - x[maxi]);
-    //sum += ret[i];
-  //}
-  //if (sum == 0) {
-    //return ret;
-  //}
-  //for (auto i = 0; i < n; ++i) {
-    //ret[i] = ret[i] / sum;
-  //}
-  //return ret;
-
   const auto n = x.size();
   VectorXtvar<T> ret(n);
   autodiff::reverse::Variable<T> sum = autodiff::reverse::constant(T(0.0));
@@ -187,13 +166,10 @@ VectorXtvar<T> act_softmax(const VectorXtvar<T>& x) {
   auto cmaxv = autodiff::reverse::constant(maxv);
   for (auto i = 0; i < n; ++i) {
     ret[i] = exp(x[i] - cmaxv);
-    if (ret[i].expr->val == 0) {
-      std::cout << "zero in softmax" << std::endl;
-    }
+    //if (ret[i].expr->val == 0) {
+      //std::cout << "zero in softmax" << std::endl;
+    //}
     sum += ret[i];
-  }
-  if (sum == 0) {
-    return ret;
   }
   for (auto i = 0; i < n; ++i) {
     ret[i] = ret[i] / sum;

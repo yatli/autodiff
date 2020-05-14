@@ -64,7 +64,11 @@ MatrixXtvar<T> weight_init(int nin, int nout, bool bias) {
   auto dist = glorot_normal(nin, nout);
   for(int r = 0; r < nout; ++r) {
     for(int c = 0; c < nin; ++c) {
-      ret(r, c) = dist(rng);
+      if (c == 0 && bias) {
+        ret(r, c) = T(0.0);
+      } else {
+        ret(r, c) = dist(rng);
+      }
     }
   }
   return ret;
@@ -147,22 +151,25 @@ VectorXtvar<T> act_relu(const VectorXtvar<T>& x) {
 
 template<typename T>
 VectorXtvar<T> act_softmax(const VectorXtvar<T>& x) {
-
   const auto n = x.size();
   VectorXtvar<T> ret(n);
-  autodiff::reverse::Variable<T> sum = 0;
-  auto maxi = 0;
-  for (auto i = 0; i < n; ++i) {
-    if(x[i].expr->val > x[maxi].expr->val) {
-      maxi = i;
+  autodiff::reverse::Variable<T> sum = autodiff::reverse::constant(T(0.0));
+  T maxv = x[0].expr->val;
+  for (auto i = 1; i < n; ++i) {
+    if(x[i].expr->val > maxv) {
+      maxv = x[i].expr->val;
     }
   }
+  //if (maxv >= 10) {
+    //std::cout << "big maxv in softmax: " << maxv << std::endl;
+  //}
+  auto cmaxv = autodiff::reverse::constant(maxv);
   for (auto i = 0; i < n; ++i) {
-    ret[i] = exp(x[i] - x[maxi]);
+    ret[i] = exp(x[i] - cmaxv);
+    //if (ret[i].expr->val == 0) {
+      //std::cout << "zero in softmax" << std::endl;
+    //}
     sum += ret[i];
-  }
-  if (sum == 0) {
-    return ret;
   }
   for (auto i = 0; i < n; ++i) {
     ret[i] = ret[i] / sum;
@@ -195,13 +202,12 @@ autodiff::reverse::Variable<T> loss_mse(const VectorXtvar<T>& y1, const VectorXt
 template<typename T>
 autodiff::reverse::Variable<T> loss_crossent(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
   const auto n = y1.size();
-  autodiff::reverse::Variable<T> sum = 0;
   for (auto i = 0; i < n; ++i) {
     if (y1[i].expr->val == 1) {
-      sum += log(y2[i]);
+      return -log(y2[i]);
     }
   }
-  return -sum;
+  return 0;
 }
 
 template<typename T>
@@ -217,28 +223,40 @@ autodiff::reverse::Variable<T> loss_abs(const VectorXtvar<T>& y1, const VectorXt
 
 template<typename T>
 VectorXtvar<T> fc_layer(const VectorXtvar<T>& x, const MatrixXtvar<T>& W, VectorXtvar<T>(f)(const VectorXtvar<T>&)) {
-  VectorXtvar<T> v = W * x;
+  VectorXtvar<T> v;
+  v.resize(W.rows());
+
+  for(int i = 0; i < W.rows(); ++i) {
+    std::vector<autodiff::reverse::Variable<T>> xs;
+    xs.reserve(W.cols());
+    for(int j = 0; j < W.cols(); ++j) {
+      xs.push_back(x[j] * W(i, j));
+    }
+    v[i] = autodiff::reverse::sum(xs);
+  }
+
   return f(v);
 }
 
 template<typename T>
-autodiff::reverse::Variable<T> conv2d_at(ndarray_t<T> &convin, ndarray_t<T> &convout, ndarray_t<T> &kernel, int y, int x) {
-  autodiff::reverse::Variable<T> sum = 0;
+autodiff::reverse::Variable<T> conv2d_at(ndarray_t<T> &convin, ndarray_t<T> &kernel, int y, int x) {
   assert(kernel.c == convin.c);
   y -= kernel.h / 2;
   x -= kernel.w / 2;
+  std::vector<autodiff::reverse::Variable<T>> xs;
+  xs.reserve(convin.c * kernel.h * kernel.w);
   for(int c = 0; c < convin.c; ++c) {
     for(int dy = 0; dy < kernel.h; ++dy) {
       for(int dx = 0; dx < kernel.w; ++dx) {
         int kx = x + dx;
         int ky = y + dy;
         if (kx < 0 || ky < 0 || kx >= convin.w || ky >= convin.h) continue;
-        sum += convin(c, ky, kx) * kernel(c, dy, dx);
+        xs.push_back(convin(c, ky, kx) * kernel(c, dy, dx));
       }
     }
   }
 
-  return sum;
+  return autodiff::reverse::sum(xs);
 }
 
 /// Each ndarray_t<T> in W represents an output channel.
@@ -249,7 +267,7 @@ ndarray_t<T> conv2d(ndarray_t<T>& convin, std::vector<ndarray_t<T>>& W, ndarray_
   for(int c = 0; c < W.size(); ++c) {
     for(int y = 0; y < convout.h; ++y) {
       for(int x = 0; x < convout.w; ++x) {
-        convout(c, y, x) = conv2d_at(convin, convout, W[c], y, x);
+        convout(c, y, x) = conv2d_at(convin, W[c], y, x);
       }
     }
   }

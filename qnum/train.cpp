@@ -42,6 +42,8 @@ template<typename T> void entry(int E, const string& arch, const string& dataset
 
     for (auto i = 0; i < ptrain->size; i += batch_size) {
 
+      pnet->seed();
+
       if (i % 10000 == 0) {
         char buf[256];
         sprintf(buf, "%s-%s-%s-e%d-h%d-lr%f-epoch-%d-step-%d.dmp", type.data(), arch.data(), dataset.data(), E, nhidden, lr, epoch, i);

@@ -134,7 +134,6 @@ int launch(int argc, char* argv[]) {
 #if defined(PARTIAL_BUILD)
   if(type == "q16") entry_wrap_q<int16_t, 0>(E, arch, dataset, lr, nhidden, type, chkpoint);
   else if (type == "f32") entry<float>(0, arch, dataset, lr, nhidden, type, chkpoint);
-  else if (type == "f32") entry<float>(0, arch, dataset, lr, nhidden, type, chkpoint);
 #else
 
   if(type == "q8") entry_wrap_q<int8_t, 0>(E, arch, dataset, lr, nhidden, type, chkpoint);

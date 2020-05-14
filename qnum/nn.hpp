@@ -73,12 +73,18 @@ struct nn_t {
     for(auto it = vec.rbegin(); it != vec.rend(); ++it) {
       (*it)->propagate_step();
     }
+    //loss.expr->propagate(T(1.0));
+  }
+
+  void seed() {
+    for (var* x : params) {
+      x->seed();
+    }
   }
 
   void learn(const T& rate) {
-    for (auto &x : params) {
-      *x = (*x - x->grad() * rate)->val;
-      x->seed();
+    for (var* x : params) {
+      x->expr->val -= x->grad() * rate;
     }
   }
 

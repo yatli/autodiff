@@ -47,6 +47,17 @@ template<> struct is_std_float<double> {
 
 AUTODIFF_DEFINE_EIGEN_TYPEDEFS_ALL_SIZES_T(autodiff::reverse::Variable<T>, tvar);
 
+template<typename T>
+T maxval(const VectorXtvar<T>& x) {
+  T maxv = x[0].expr->val;
+  for (auto i = 1; i < x.size(); ++i) {
+    if(x[i].expr->val > maxv) {
+      maxv = x[i].expr->val;
+    }
+  }
+  return maxv;
+}
+
 /// xavier initialization
 std::normal_distribution<double> glorot_normal(int nin, int nout) {
   double dev = std::sqrt(2.0 / (nin + nout));
@@ -150,20 +161,20 @@ VectorXtvar<T> act_relu(const VectorXtvar<T>& x) {
 }
 
 template<typename T>
+VectorXtvar<T> act_identity(const VectorXtvar<T>& x) {
+  return x;
+}
+
+/// !! consider loss_crossent first
+template<typename T>
 VectorXtvar<T> act_softmax(const VectorXtvar<T>& x) {
   const auto n = x.size();
   VectorXtvar<T> ret(n);
   autodiff::reverse::Variable<T> sum = autodiff::reverse::constant(T(0.0));
-  T maxv = x[0].expr->val;
-  for (auto i = 1; i < n; ++i) {
-    if(x[i].expr->val > maxv) {
-      maxv = x[i].expr->val;
-    }
-  }
   //if (maxv >= 10) {
     //std::cout << "big maxv in softmax: " << maxv << std::endl;
   //}
-  auto cmaxv = autodiff::reverse::constant(maxv);
+  auto cmaxv = autodiff::reverse::constant(maxval(x));
   for (auto i = 0; i < n; ++i) {
     ret[i] = exp(x[i] - cmaxv);
     //if (ret[i].expr->val == 0) {
@@ -199,12 +210,28 @@ autodiff::reverse::Variable<T> loss_mse(const VectorXtvar<T>& y1, const VectorXt
   return sum;
 }
 
+/// combines softmax and negative log likelyhood.
+/// better numerical stability than combining two separate functions.
+/// nll(y1, softmax(y2))
+/// = -log(exp(y2[class]-y2max)-sum(exp(y2-y2max)))
+/// = log(sum(exp(y2-y2max))) - y2[class] + y2max
 template<typename T>
 autodiff::reverse::Variable<T> loss_crossent(const VectorXtvar<T>& y1, const VectorXtvar<T>& y2) {
-  const auto n = y1.size();
+  const auto n = y2.size();
+  autodiff::reverse::Variable<T> sum = autodiff::reverse::constant(T(0.0));
+  auto cmaxv = autodiff::reverse::constant(maxval(y2));
+
+  //if (maxv >= 10) {
+    //std::cout << "big maxv in softmax: " << maxv << std::endl;
+  //}
+
+  for (auto i = 0; i < n; ++i) {
+    sum += exp(y2[i] - cmaxv);
+  }
+
   for (auto i = 0; i < n; ++i) {
     if (y1[i].expr->val == 1) {
-      return -log(y2[i]);
+      return log(sum) - (y2[i] - cmaxv);
     }
   }
   return 0;

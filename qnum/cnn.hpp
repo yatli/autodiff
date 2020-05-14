@@ -42,7 +42,7 @@ struct cnn_t : public nn_t<T> {
     auto x8 = fc_layer(x7, Wf1, act_relu);
     // dropout(x8, 0.5);
     auto x9 = withb(x8);
-    auto x10 = fc_layer(x9, Wf2, act_softmax);
+    auto x10 = fc_layer(x9, Wf2, act_identity);
     return x10;
   }
 };

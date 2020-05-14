@@ -23,7 +23,7 @@ struct mlp_t : public nn_t<T> {
   virtual vec forward(const vec& x) {
     auto bx = withb(x);
     auto hx = withb(fc_layer(bx, w1, act_relu));
-    auto ox = fc_layer(hx, w2, act_softmax);
+    auto ox = fc_layer(hx, w2, act_identity);
     return ox;
   }
 

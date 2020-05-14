@@ -64,3 +64,4 @@ CMakeSettings.json
 
 # pytorch data
 qnum/data
+out/

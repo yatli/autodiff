@@ -61,3 +61,6 @@ CMakeSettings.json
 
 # ccls
 .ccls-cache
+
+# pytorch data
+qnum/data

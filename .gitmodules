@@ -1,3 +1,6 @@
 [submodule "flexfloat"]
 	path = flexfloat
 	url = https://github.com/oprecomp/flexfloat.git
+[submodule "fastText"]
+	path = fastText
+	url = git@github.com:yatli/fastText.git

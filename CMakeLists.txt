@@ -32,6 +32,7 @@ add_subdirectory(examples)
 add_subdirectory(test)
 add_subdirectory(flexfloat)
 add_subdirectory(qnum)
+add_subdirectory(fastText)
 
 # Install the cmake config files that permit users to use find_package(Reaktoro)
 include(autodiffInstallCMakeConfigFiles)

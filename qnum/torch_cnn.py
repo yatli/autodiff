@@ -16,8 +16,7 @@ class SimpleCnn(torch.nn.Module):
         self.fcs = torch.nn.Sequential(
             torch.nn.Linear(32 * 8 * 8, 128),
             torch.nn.ReLU(True),
-            torch.nn.Linear(128, 10),
-            torch.nn.Softmax())
+            torch.nn.Linear(128, 10))
     def forward(self, x):
         x = self.convs(x)
         x = x.view(x.size(0), -1)
@@ -44,7 +43,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 net = SimpleCnn()
 net.to(device)
 criterion = torch.nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(net.parameters(), lr=0.1)
+optimizer = torch.optim.SGD(net.parameters(), lr=0.01)
 
 for epoch in range(40):  # loop over the dataset multiple times
 

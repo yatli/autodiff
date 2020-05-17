@@ -1,0 +1,30 @@
+scratchpad for f32_mul to f16_mul porting
+
+IEEE754 FP32 layout:
+
+| 31 | 30 .. 23 | 22 .. 0 |
+  s    exp[8]     frac[23+1]
+
+IEEE754 FP16 layout:
+| 15 | 14 .. 10 | 9 .. 0 |
+  s    exp[5]     frac[10+1]
+
+31:0 -> 15:0
+23:0 -> 10:0 frac parts with sticky bit, a_m, b_m, z_m
+9:0 -> 7:0 exp parts, extended 2bit (??)
+49:0 -> 23:0 a_m * b_m * 4, so 24*2 + 2 -> 11*2 + 2
+
+unpack:
+a_m <= a[22 : 0]; -> a_m <= a[9:0]; a_m was 23:0, now 10:0
+a_e <= a[30 : 23] - 127; -> a_e <= a[14:10]; the exp part
+
+special_cases:
+z[22] <= 1; -> z[9] <= 1; the msb for frac
+z[21:0] <= 0; -> z[8:0] <= 0; the rest bits for frac
+z[22:0] <= 0; -> z[9:0] <= 0; the full frac part (sticky is hidden)
+
+multiply_1:
+z_m <= product[49:26]; -> z_m <= product[23:13] ; was high 24 bit, now high 11 bit
+guard <= product[25]; -> guard <= product[12]
+round_bit <= product[24]; -> round_bit <= product[11]
+sticky <= (product[23:0] != 0); -> sticky <= (product[10:0] != 0);

@@ -65,3 +65,10 @@ CMakeSettings.json
 # pytorch data
 qnum/data
 out/
+
+# Xilinx metadata
+verilog/qnum.cache
+verilog/qnum.hw
+verilog/qnum.ip_user_files
+verilog/qnum.runs
+verilog/qnum.sims

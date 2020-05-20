@@ -23,10 +23,11 @@ class SimpleCnn(torch.nn.Module):
         return self.fcs(x)
 
 batch_size = 40
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 transform = transforms.Compose(
-    [transforms.ToTensor()]) #,
-     # transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    [transforms.ToTensor(),
+     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
 
 trainset = torchvision.datasets.CIFAR10(root='./data', train=True,
                                         download=True, transform=transform)
@@ -38,10 +39,9 @@ testset = torchvision.datasets.CIFAR10(root='./data', train=False,
 testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
                                          shuffle=False, num_workers=0)
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 # device = torch.device("cpu")
 net = SimpleCnn()
-net.to(device)
+net.to(device).half()
 criterion = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(net.parameters(), lr=0.01)
 
@@ -53,7 +53,7 @@ for epoch in range(40):  # loop over the dataset multiple times
     # training loop
     for i, data in enumerate(trainloader, 0):
         # get the inputs; data is a list of [inputs, labels]
-        inputs, labels = data[0].to(device), data[1].to(device)
+        inputs, labels = data[0].to(device).half(), data[1].to(device)
 
         # zero the parameter gradients
         optimizer.zero_grad()
@@ -80,7 +80,7 @@ for epoch in range(40):  # loop over the dataset multiple times
     with torch.no_grad():
         for i, data in enumerate(testloader, 0):
             # get the inputs; data is a list of [inputs, labels]
-            inputs, labels = data[0].to(device), data[1].to(device)
+            inputs, labels = data[0].to(device).half(), data[1].to(device)
             outputs = net(inputs)
             loss = criterion(outputs, labels)
             ntotal += batch_size

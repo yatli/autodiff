@@ -120,7 +120,7 @@ module f32_add(
     .a (b_m),
     .b (~a_m), // XXX +1
     .cin (0),
-    .sum (subtor_am_bm_dif)
+    .sum (subtor_bm_am_dif)
   );
 
   i32_add adder_zm_1(

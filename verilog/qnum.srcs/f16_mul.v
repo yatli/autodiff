@@ -19,6 +19,8 @@ module f16_mul(
   );
 
 
+  wire      valid;
+  reg       ld;
   reg       s_output_z_stb;
   reg       [15:0] s_output_z;
   reg       s_input_a_ack;
@@ -47,45 +49,16 @@ module f16_mul(
   reg       [23:0] product;
 
   wire [23:0] mul_result;
-  TopMultiplier multiplier(
-    .x_in(a_m),
-    .y_in(b_m),
-    .result_out(mul_result)
+
+  Booth_Multiplier_4x multiplier(
+    .M(a_m),
+    .R(b_m),
+    .Ld(ld),
+    .Rst(rst),
+    .Clk(clk),
+    .Valid(valid),
+    .P(mul_result)
   );
-
-  wire [7:0] adder_ze_1_sum;
-  i16_add adder_ze_1(
-    .a (z_e[7:0]),
-    .b (1),
-    .cin (0),
-    .sum (adder_ze_1_sum)
-  );
-
-  wire [7:0] adder_ae_be_sum;
-  i16_add adder_ae_be(
-    .a (a_e),
-    .b (b_e),
-    .cin (0),
-    .sum (adder_ae_be_sum)
-  );
-
-  wire [26:0] adder_zm_1_sum;
-  i32_add adder_zm_1(
-    .a (z_m),
-    .b (1),
-    .cin (0),
-    .sum (adder_zm_1_sum)
-  );
-
-  wire [7:0] adder_ze_127_sum;
-  i16_add adder_ze_127(
-    .a (z_e[7:0]),
-    .b (127),
-    .cin (0),
-    .sum (adder_ze_127_sum)
-  );
-
-
 
   always @(posedge clk)
   begin
@@ -209,10 +182,17 @@ module f16_mul(
 
       multiply_0:
       begin
-        z_s <= a_s ^ b_s;
-        z_e <= adder_ae_be_sum + 1;
-        product <= mul_result << 2; // a_m * b_m * 4; 
-        state <= multiply_1;
+        if (!ld) begin
+          z_s <= a_s ^ b_s;
+          z_e <= a_e + b_e + 1;
+          product <= mul_result << 2; // a_m * b_m * 4; XXX *4
+          ld <= 1;
+        end else begin
+          if (valid) begin
+            ld <= 0;
+            state <= multiply_1;
+          end
+        end
       end
 
       multiply_1:
@@ -240,7 +220,7 @@ module f16_mul(
       normalise_2:
       begin
         if ($signed(z_e) < -126) begin
-          z_e <= adder_ze_1_sum;
+          z_e <= z_e + 1;
           z_m <= z_m >> 1;
           guard <= z_m[0];
           round_bit <= guard;
@@ -253,9 +233,9 @@ module f16_mul(
       round:
       begin
         if (guard && (round_bit | sticky | z_m[0])) begin
-          z_m <= adder_zm_1_sum;
+          z_m <= z_m + 1;
           if (z_m == 11'h7ff) begin
-            z_e <=adder_ze_1_sum;
+            z_e <=z_e + 1;
           end
         end
         state <= pack;
@@ -264,7 +244,7 @@ module f16_mul(
       pack:
       begin
         z[9:0] <= z_m[9:0];
-        z[14:10] <= adder_ze_127_sum; // z_e[7:0] + 127;
+        z[14:10] <= z_e[7:0] + 127;
         z[15] <= z_s;
         if ($signed(z_e) == -126 && z_m[10] == 0) begin
           z[14:10] <= 0;
@@ -292,6 +272,7 @@ module f16_mul(
 
     if (rst == 1) begin
       state <= get_a;
+      ld <= 0;
       s_input_a_ack <= 0;
       s_input_b_ack <= 0;
       s_output_z_stb <= 0;

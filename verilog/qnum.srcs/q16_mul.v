@@ -3,17 +3,23 @@
 module q16_mul(
   input [15:0] input_a,
   input [15:0] input_b,
+  input ld,
+  input rst,
+  input clk,
   output [15:0] output_z
 );
 
 wire [15:0] scaled_a, scaled_b;
-wire [31:0] product;
+wire [29:0] product;
 wire G;
 
-TopMultiplier multiplier(
-  .x_in(scaled_a[14:0]),
-  .y_in(scaled_b[14:0]),
-  .result_out(product)
+Booth_Multiplier_4x multiplier(
+  .M(scaled_a[14:0]),
+  .R(scaled_b[14:0]),
+  .Ld(ld),
+  .Rst(rst),
+  .Clk(clk),
+  .P(product)
 );
 
 q16_scaleup scaleup(
@@ -28,8 +34,9 @@ q16_scaleup scaleup(
 // shift8:     [22 .. 8]
 // shift11:    [25 .. 11]
 
-wire [14:0] shift_product = G ? product[25:11] : 
-                            product[22:8];
+//wire [14:0] shift_product = G ? product[25:11] : 
+                            //product[22:8];
+wire [14:0] shift_product = product[22:8];
 
 assign output_z = { G, shift_product }; // XXX wrong
 

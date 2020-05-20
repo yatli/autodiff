@@ -150,10 +150,13 @@ const dataset_t<T>* load_cifar_data(bool train) {
           p->labels[offset][j] = autodiff::reverse::constant<T>(T(0.0));
         }
       }
+      double cifar10_mean[3] = {0.4914, 0.4822, 0.4465};
+      double cifar10_std[3] = {0.2023, 0.1994, 0.2010};
       for(int c = 0; c < c_cifar10_imgc; ++c) {
         for(int h = 0; h < c_cifar10_imgh; ++h) {
           for(int w = 0; w < c_cifar10_imgw; ++w) {
-            p->imgs[offset][w + h * c_cifar10_imgw + c * c_cifar10_imgw * c_cifar10_imgh] = autodiff::reverse::constant<T>(T(data[i].image[c][h][w] / 255.0));
+            double normalized_val = (data[i].image[c][h][w] / 255.0 - cifar10_mean[c]) / cifar10_std[c];
+            p->imgs[offset][w + h * c_cifar10_imgw + c * c_cifar10_imgw * c_cifar10_imgh] = autodiff::reverse::constant<T>(T(normalized_val));
           }
         }
       }
